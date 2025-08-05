@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ComfyUI工作流管理器</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- 头部 -->
+        <header class="header">
+            <div class="container">
+                <h1 class="title">
+                    <i class="fas fa-robot"></i>
+                    ComfyUI 工作流管理器
+                </h1>
+                <div class="header-actions">
+                    <a href="/gallery" class="btn btn-secondary" style="margin-right: 10px;">
+                        <i class="fas fa-images"></i>
+                        图片画廊
+                    </a>
+                    <div class="status-indicator" id="serverStatus">
+                        <span class="status-dot"></span>
+                        <span class="status-text">连接中...</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- 主要内容 -->
+        <main class="main">
+            <div class="container">
+                <!-- 加载状态 -->
+                <div id="loadingState" class="loading-state">
+                    <div class="spinner"></div>
+                    <p>正在加载工作流...</p>
+                </div>
+
+                <!-- 错误状态 -->
+                <div id="errorState" class="error-state" style="display: none;">
+                    <div class="error-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <h3>加载失败</h3>
+                    <p id="errorMessage">无法加载工作流列表</p>
+                    <button class="btn btn-primary" onclick="app.loadWorkflows()">
+                        <i class="fas fa-redo"></i>
+                        重试
+                    </button>
+                </div>
+
+                <!-- 工作流选择页面 -->
+                <div id="workflowSelectionPage" class="workflow-selection-page" style="display: none;">
+                    <div class="page-header">
+                        <h2>ComfyUI 工作流管理器</h2>
+                        <p>选择工作流开始您的AI图像生成之旅</p>
+                    </div>
+                    
+                    <!-- 快速选择区域 -->
+                    <div class="quick-select">
+                        <div class="select-group">
+                            <label for="workflowSelect">选择工作流：</label>
+                            <select id="workflowSelect">
+                                <option value="">请选择工作流...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- 工作流简介卡片 -->
+                    <div class="workflow-intro">
+                        <div class="intro-card" id="selectedWorkflowIntro" style="display: none;">
+                            <div class="intro-header">
+                                <h3 id="introTitle">工作流名称</h3>
+                                <span id="introType" class="workflow-type">类型</span>
+                            </div>
+                            <p id="introDescription">工作流描述</p>
+                            <div class="intro-features" id="introFeatures">
+                                <!-- 功能特点 -->
+                            </div>
+                            <div class="intro-actions">
+                                <button class="btn btn-primary btn-large" id="startConfigBtn">
+                                    <i class="fas fa-cog"></i>
+                                    开始配置
+                                </button>
+                                <button class="btn btn-secondary" id="shareLinkBtn" style="display: none;">
+                                    <i class="fas fa-link"></i>
+                                    分享链接
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 快速访问链接 -->
+                    <div class="quick-links">
+                        <h3>快速访问</h3>
+                        <div class="link-grid" id="quickLinks">
+                            <!-- 快速链接将在这里动态生成 -->
+                        </div>
+                    </div>
+
+                    <!-- 搜索和详细列表 -->
+                    <div class="advanced-options">
+                        <details>
+                            <summary>
+                                <i class="fas fa-search"></i>
+                                搜索和浏览所有工作流
+                            </summary>
+                            <div class="search-box">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="searchInput" placeholder="搜索工作流..." 
+                                       oninput="app.filterWorkflows()">
+                            </div>
+                            <div id="workflowCards" class="workflow-cards">
+                                <!-- 工作流卡片将在这里动态生成 -->
+                            </div>
+                        </details>
+                    </div>
+                </div>
+
+                <!-- 参数配置页面 -->
+                <div id="parameterConfigPage" class="parameter-config-page" style="display: none;">
+                    <div class="page-header">
+                        <div class="header-content">
+                            <button class="btn btn-secondary back-btn" onclick="app.backToWorkflowSelection()">
+                                <i class="fas fa-arrow-left"></i>
+                                返回
+                            </button>
+                            <div class="header-info">
+                                <h2 id="configWorkflowName">配置参数</h2>
+                                <p id="configWorkflowType">工作流类型</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="config-container">
+                        <div class="config-sidebar">
+                            <div class="config-nav">
+                                <button class="nav-item active" data-section="basic">
+                                    <i class="fas fa-cog"></i>
+                                    基础参数
+                                </button>
+                                <button class="nav-item" data-section="prompt">
+                                    <i class="fas fa-font"></i>
+                                    提示词
+                                </button>
+                                <button class="nav-item" data-section="image">
+                                    <i class="fas fa-image"></i>
+                                    图像输入
+                                </button>
+                                <!-- 高级设置已移除，相关配置移至模型加载器配置区域 -->
+                                <button class="nav-item" data-section="modelLoaders">
+                                    <i class="fas fa-cube"></i>
+                                    模型加载器
+                                </button>
+                                <button class="nav-item" data-section="controlnetConfigs">
+                                    <i class="fas fa-sliders-h"></i>
+                                    ControlNet
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="config-content">
+                            <!-- 基础参数 -->
+                            <div id="basicSection" class="config-section active">
+                                <h3>基础生成参数</h3>
+                                <div class="parameter-grid">
+                                    <div class="form-group">
+                                        <label for="width">图像宽度</label>
+                                        <input type="number" id="width" name="width" min="64" max="2048" step="64">
+                                        <span class="default-value">默认: <span id="defaultWidth">512</span></span>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="height">图像高度</label>
+                                        <input type="number" id="height" name="height" min="64" max="2048" step="64">
+                                        <span class="default-value">默认: <span id="defaultHeight">512</span></span>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="steps">生成步数</label>
+                                        <input type="number" id="steps" name="steps" min="1" max="100">
+                                        <span class="default-value">默认: <span id="defaultSteps">20</span></span>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="cfg">CFG Scale</label>
+                                        <input type="number" id="cfg" name="cfg" min="1" max="20" step="0.5">
+                                        <span class="default-value">默认: <span id="defaultCfg">7.0</span></span>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="seed">随机种子</label>
+                                        <input type="number" id="seed" name="seed" placeholder="-1 表示随机">
+                                        <span class="default-value">默认: <span id="defaultSeed">-1</span></span>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="sampler">采样器</label>
+                                        <select id="sampler" name="sampler">
+                                            <option value="euler">Euler</option>
+                                            <option value="euler_ancestral">Euler Ancestral</option>
+                                            <option value="dpm_2">DPM 2</option>
+                                            <option value="dpm_2_ancestral">DPM 2 Ancestral</option>
+                                            <option value="ddim">DDIM</option>
+                                        </select>
+                                        <span class="default-value">默认: <span id="defaultSampler">euler</span></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 提示词设置 -->
+                            <div id="promptSection" class="config-section">
+                                <h3>提示词设置</h3>
+                                <div class="form-group">
+                                    <label for="positivePrompt">正面提示词 *</label>
+                                    <textarea id="positivePrompt" name="positive_prompt" rows="4" 
+                                              placeholder="描述您想要生成的图像内容..."></textarea>
+                                    <div class="prompt-tools">
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="app.insertPromptTemplate('portrait')">
+                                            <i class="fas fa-user"></i> 人像
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="app.insertPromptTemplate('landscape')">
+                                            <i class="fas fa-mountain"></i> 风景
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="app.insertPromptTemplate('anime')">
+                                            <i class="fas fa-star"></i> 动漫
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="form-group" id="negativePromptGroup" style="display: none;">
+                                    <label for="negativePrompt">负面提示词</label>
+                                    <textarea id="negativePrompt" name="negative_prompt" rows="3" 
+                                              placeholder="描述您不想要的内容..."></textarea>
+                                    <div class="prompt-tools">
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="app.insertNegativeTemplate()">
+                                            <i class="fas fa-ban"></i> 标准负面
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 图像输入 -->
+                            <div id="imageSection" class="config-section">
+                                <h3>图像输入设置</h3>
+                                <div id="imageInputs">
+                                    <!-- 图像输入节点将在这里动态生成 -->
+                                </div>
+                            </div>
+
+                            <!-- 高级设置已移除，相关配置移至模型加载器配置区域 -->
+
+                            <!-- 模型加载器配置 -->
+                            <div id="modelLoadersSection" class="config-section">
+                                <h3>模型加载器配置</h3>
+                                <div id="modelLoaders">
+                                    <!-- 模型加载器配置将在这里动态生成 -->
+                                </div>
+                            </div>
+
+                            <!-- ControlNet配置 -->
+                            <div id="controlnetConfigsSection" class="config-section">
+                                <h3>ControlNet配置</h3>
+                                <div id="controlnetConfigs">
+                                    <!-- ControlNet配置将在这里动态生成 -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="config-actions">
+                        <button class="btn btn-secondary" id="resetBtn">
+                            <i class="fas fa-undo"></i>
+                            重置为默认值
+                        </button>
+                        <button class="btn btn-primary" id="startGenerationBtn">
+                            <i class="fas fa-play"></i>
+                            开始生成
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 任务状态页面 -->
+                <div id="taskStatusPage" class="task-status-page" style="display: none;">
+                    <div class="page-header">
+                        <div class="header-content">
+                            <button class="btn btn-secondary back-btn" onclick="app.backToParameterConfig()">
+                                <i class="fas fa-arrow-left"></i>
+                                返回
+                            </button>
+                            <div class="header-info">
+                                <h2 id="taskTitle">生成任务</h2>
+                                <p id="taskStatus">准备中...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="task-progress">
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div id="progressBar" class="progress-fill"></div>
+                            </div>
+                            <span id="progressText">0%</span>
+                        </div>
+                        
+                        <div class="task-details">
+                            <div class="detail-item">
+                                <span class="label">工作流:</span>
+                                <span id="taskWorkflowName">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="label">开始时间:</span>
+                                <span id="taskStartTime">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="label">预计剩余:</span>
+                                <span id="taskRemaining">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="taskOutput" class="task-output" style="display: none;">
+                        <h3>生成结果</h3>
+                        <div id="outputImages" class="output-images">
+                            <!-- 生成的图像将在这里显示 -->
+                        </div>
+                        <div id="outputInfo" class="output-info">
+                            <!-- 生成信息将在这里显示 -->
+                        </div>
+                    </div>
+
+                    <div id="taskError" class="task-error" style="display: none;">
+                        <h3>生成失败</h3>
+                        <div id="errorContent" class="error-content">
+                            <!-- 错误信息将在这里显示 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 图像选择对话框 -->
+        <div id="imageSelectModal" class="modal" style="display: none;">
+            <div class="modal-content image-select-modal">
+                <div class="modal-header">
+                    <h3>选择图像</h3>
+                    <button class="btn btn-sm btn-secondary" onclick="app.hideImageSelectModal()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="image-tabs">
+                        <button class="tab-btn active" data-tab="uploaded">已上传</button>
+                        <button class="tab-btn" data-tab="generated">已生成</button>
+                        <button class="tab-btn" data-tab="upload">上传新图像</button>
+                    </div>
+                    
+                    <div id="uploadedImages" class="image-grid active">
+                        <!-- 已上传的图像 -->
+                    </div>
+                    
+                    <div id="generatedImages" class="image-grid">
+                        <!-- 已生成的图像 -->
+                    </div>
+                    
+                    <div id="uploadNewImage" class="image-upload">
+                        <div class="upload-area">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <p>拖拽图像到此处或点击选择</p>
+                            <input type="file" id="imageUploadInput" accept="image/*" multiple>
+                            <button class="btn btn-primary" onclick="document.getElementById('imageUploadInput').click()">
+                                选择图像
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

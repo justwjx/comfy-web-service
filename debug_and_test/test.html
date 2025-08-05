@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试页面</title>
+</head>
+<body>
+    <h1>ComfyUI Web Service 测试</h1>
+    <div id="status">正在测试...</div>
+    <div id="result"></div>
+    
+    <script>
+        // 测试API连接
+        async function testAPI() {
+            try {
+                console.log('开始测试API...');
+                const response = await fetch('/api/workflows');
+                console.log('API响应状态:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                console.log('API返回数据:', data);
+                
+                if (data.success) {
+                    const workflows = data.workflows || [];
+                    console.log('工作流数量:', workflows.length);
+                    
+                    // 测试每个工作流对象
+                    workflows.forEach((workflow, index) => {
+                        console.log(`工作流 ${index}:`, workflow);
+                        
+                        // 测试filename访问
+                        if (workflow && workflow.filename) {
+                            console.log(`工作流 ${index} filename:`, workflow.filename);
+                        } else {
+                            console.warn(`工作流 ${index} 缺少filename:`, workflow);
+                        }
+                    });
+                    
+                    document.getElementById('result').innerHTML = `
+                        <h3>测试成功！</h3>
+                        <p>找到 ${workflows.length} 个工作流</p>
+                        <ul>
+                            ${workflows.map(w => `<li>${w.name} (${w.filename})</li>`).join('')}
+                        </ul>
+                    `;
+                } else {
+                    throw new Error(data.error || 'API返回失败');
+                }
+            } catch (error) {
+                console.error('测试失败:', error);
+                document.getElementById('result').innerHTML = `
+                    <h3>测试失败</h3>
+                    <p>错误: ${error.message}</p>
+                `;
+            }
+        }
+        
+        // 页面加载完成后开始测试
+        document.addEventListener('DOMContentLoaded', testAPI);
+    </script>
+</body>
+</html> 

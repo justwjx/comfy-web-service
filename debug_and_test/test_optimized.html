@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ComfyUI 优化测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>ComfyUI Web服务优化测试</h1>
+    
+    <div class="test-section info">
+        <h3>优化内容</h3>
+        <ul>
+            <li>✅ 简化首页设计，使用下拉菜单快速选择工作流</li>
+            <li>✅ 修复参数配置页面选项卡切换功能</li>
+            <li>✅ 修复"开始生成"按钮功能</li>
+            <li>✅ 添加URL路由支持，可直接访问特定工作流</li>
+            <li>✅ 添加分享链接功能</li>
+            <li>✅ 优化移动端体验</li>
+            <li>✅ 减少初始加载时间</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h3>API测试</h3>
+        <button onclick="testWorkflows()">测试工作流列表</button>
+        <button onclick="testComfyUIStatus()">测试ComfyUI连接</button>
+        <button onclick="testURLRouting()">测试URL路由</button>
+        <div id="apiResult" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>功能测试</h3>
+        <button onclick="openMainApp()">打开主应用</button>
+        <button onclick="openWithWorkflow()">打开特定工作流</button>
+        <div id="functionResult" class="result"></div>
+    </div>
+
+    <script>
+        async function testWorkflows() {
+            const result = document.getElementById('apiResult');
+            result.textContent = '正在测试工作流列表...';
+            
+            try {
+                const response = await fetch('/api/workflows');
+                const data = await response.json();
+                
+                if (data.success) {
+                    result.textContent = `✅ 工作流列表加载成功\n找到 ${data.workflows.length} 个工作流\n\n前3个工作流:\n${data.workflows.slice(0, 3).map(w => `- ${w.name} (${w.filename})`).join('\n')}`;
+                    result.parentElement.className = 'test-section success';
+                } else {
+                    throw new Error(data.error || '未知错误');
+                }
+            } catch (error) {
+                result.textContent = `❌ 工作流列表加载失败: ${error.message}`;
+                result.parentElement.className = 'test-section error';
+            }
+        }
+
+        async function testComfyUIStatus() {
+            const result = document.getElementById('apiResult');
+            result.textContent = '正在测试ComfyUI连接...';
+            
+            try {
+                const response = await fetch('/api/comfyui/status');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const status = data.connected ? '已连接' : '未连接';
+                    result.textContent = `✅ ComfyUI状态检查成功\n连接状态: ${status}\n服务器信息: ${JSON.stringify(data.info || {}, null, 2)}`;
+                    result.parentElement.className = 'test-section success';
+                } else {
+                    throw new Error(data.error || '未知错误');
+                }
+            } catch (error) {
+                result.textContent = `❌ ComfyUI状态检查失败: ${error.message}`;
+                result.parentElement.className = 'test-section error';
+            }
+        }
+
+        function testURLRouting() {
+            const result = document.getElementById('apiResult');
+            const currentUrl = window.location.href;
+            const testUrl = currentUrl.replace('test_optimized.html', '') + '?workflow=test-workflow.json';
+            
+            result.textContent = `✅ URL路由测试\n当前URL: ${currentUrl}\n测试URL: ${testUrl}\n\n点击"打开特定工作流"按钮测试URL路由功能`;
+            result.parentElement.className = 'test-section success';
+        }
+
+        function openMainApp() {
+            const result = document.getElementById('functionResult');
+            const url = window.location.href.replace('test_optimized.html', '');
+            
+            result.textContent = `✅ 主应用URL: ${url}\n\n在新窗口中打开主应用进行完整功能测试`;
+            result.parentElement.className = 'test-section success';
+            
+            window.open(url, '_blank');
+        }
+
+        function openWithWorkflow() {
+            const result = document.getElementById('functionResult');
+            const baseUrl = window.location.href.replace('test_optimized.html', '');
+            const testUrl = baseUrl + '?workflow=flux-schnell.json';
+            
+            result.textContent = `✅ 特定工作流URL: ${testUrl}\n\n在新窗口中打开特定工作流页面`;
+            result.parentElement.className = 'test-section success';
+            
+            window.open(testUrl, '_blank');
+        }
+
+        // 页面加载时自动测试
+        window.addEventListener('load', () => {
+            setTimeout(testWorkflows, 1000);
+        });
+    </script>
+</body>
+</html> 

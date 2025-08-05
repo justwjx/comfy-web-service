@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>调试页面</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .workflow-item { 
+            border: 1px solid #ccc; 
+            margin: 10px 0; 
+            padding: 10px; 
+            cursor: pointer;
+            background: #f9f9f9;
+        }
+        .workflow-item:hover { background: #e9e9e9; }
+        .error { color: red; background: #ffe6e6; padding: 10px; margin: 10px 0; }
+        .success { color: green; background: #e6ffe6; padding: 10px; margin: 10px 0; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>ComfyUI 调试页面</h1>
+    <div id="status">正在加载...</div>
+    <div id="workflows"></div>
+    <div id="result"></div>
+    
+    <script>
+        let workflows = [];
+        
+        // 加载工作流
+        async function loadWorkflows() {
+            try {
+                console.log('开始加载工作流...');
+                const response = await fetch('/api/workflows');
+                console.log('API响应状态:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                console.log('API返回数据:', data);
+                
+                if (data.success) {
+                    workflows = data.workflows || [];
+                    console.log('工作流数量:', workflows.length);
+                    displayWorkflows();
+                    document.getElementById('status').innerHTML = '<div class="success">成功加载 ' + workflows.length + ' 个工作流</div>';
+                } else {
+                    throw new Error(data.error || 'API返回失败');
+                }
+            } catch (error) {
+                console.error('加载失败:', error);
+                document.getElementById('status').innerHTML = '<div class="error">加载失败: ' + error.message + '</div>';
+            }
+        }
+        
+        // 显示工作流列表
+        function displayWorkflows() {
+            const container = document.getElementById('workflows');
+            container.innerHTML = '<h2>工作流列表:</h2>';
+            
+            workflows.forEach((workflow, index) => {
+                const div = document.createElement('div');
+                div.className = 'workflow-item';
+                div.innerHTML = `
+                    <h3>${workflow.name || '未命名'}</h3>
+                    <p><strong>文件名:</strong> ${workflow.filename || '未知'}</p>
+                    <p><strong>描述:</strong> ${workflow.description || '无描述'}</p>
+                    <button onclick="testWorkflow(${index})">测试选择</button>
+                    <button onclick="testRun(${index})">测试运行</button>
+                `;
+                container.appendChild(div);
+            });
+        }
+        
+        // 测试工作流选择
+        function testWorkflow(index) {
+            try {
+                console.log('测试工作流选择:', index);
+                const workflow = workflows[index];
+                console.log('选中的工作流:', workflow);
+                
+                if (!workflow) {
+                    throw new Error('工作流对象为空');
+                }
+                
+                if (!workflow.filename) {
+                    throw new Error('工作流缺少filename字段');
+                }
+                
+                document.getElementById('result').innerHTML = `
+                    <div class="success">
+                        <h3>选择成功!</h3>
+                        <p>工作流: ${workflow.name}</p>
+                        <p>文件名: ${workflow.filename}</p>
+                    </div>
+                `;
+                
+            } catch (error) {
+                console.error('选择工作流失败:', error);
+                document.getElementById('result').innerHTML = `
+                    <div class="error">
+                        <h3>选择失败!</h3>
+                        <p>错误: ${error.message}</p>
+                        <p>工作流数据: ${JSON.stringify(workflows[index])}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        // 测试运行工作流
+        async function testRun(index) {
+            try {
+                console.log('测试运行工作流:', index);
+                const workflow = workflows[index];
+                
+                if (!workflow || !workflow.filename) {
+                    throw new Error('工作流无效');
+                }
+                
+                const response = await fetch('/api/run', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        filename: workflow.filename
+                    })
+                });
+                
+                const data = await response.json();
+                console.log('运行响应:', data);
+                
+                if (data.success) {
+                    document.getElementById('result').innerHTML = `
+                        <div class="success">
+                            <h3>启动成功!</h3>
+                            <p>任务ID: ${data.task_id}</p>
+                            <p>工作流: ${workflow.name}</p>
+                        </div>
+                    `;
+                } else {
+                    throw new Error(data.error || '启动失败');
+                }
+                
+            } catch (error) {
+                console.error('运行工作流失败:', error);
+                document.getElementById('result').innerHTML = `
+                    <div class="error">
+                        <h3>运行失败!</h3>
+                        <p>错误: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        // 页面加载完成后开始
+        document.addEventListener('DOMContentLoaded', loadWorkflows);
+    </script>
+</body>
+</html> 

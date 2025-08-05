@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前端功能测试</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .test-container {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .test-result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 4px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>前端功能测试</h1>
+        
+        <div class="test-section">
+            <h3>1. 测试工作流分析API</h3>
+            <button onclick="testWorkflowAnalysis()">测试分析</button>
+            <div id="analysisResult" class="test-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>2. 测试模型加载器生成</h3>
+            <button onclick="testModelLoaders()">测试生成</button>
+            <div id="modelLoadersResult" class="test-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>3. 测试Negative Prompt切换</h3>
+            <button onclick="testNegativePrompt()">测试切换</button>
+            <div id="negativePromptResult" class="test-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>4. 实际界面测试</h3>
+            <button onclick="openMainPage()">打开主页面</button>
+            <p>点击按钮打开主页面，然后选择 Nunchaku Flux.1 Dev 工作流查看效果</p>
+        </div>
+    </div>
+
+    <script>
+        async function testWorkflowAnalysis() {
+            const resultDiv = document.getElementById('analysisResult');
+            resultDiv.innerHTML = '测试中...';
+            
+            try {
+                const response = await fetch('/api/analyze-workflow/nunchaku-flux.1-dev.json');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const analysis = data.analysis;
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ 分析成功<br>
+                            - 工作流类型: ${analysis.type}<br>
+                            - 是否有negative prompt: ${analysis.has_negative_prompt}<br>
+                            - 模型加载器数量: ${analysis.model_loaders.length}<br>
+                            - 模型加载器类型: ${analysis.model_loaders.map(l => l.type).join(', ')}
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<div class="error">❌ 分析失败: ${data.error}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ 请求失败: ${error.message}</div>`;
+            }
+        }
+        
+        function testModelLoaders() {
+            const resultDiv = document.getElementById('modelLoadersResult');
+            
+            // 模拟模型加载器数据
+            const mockModelLoaders = [
+                {
+                    node_id: 44,
+                    type: 'NunchakuTextEncoderLoader',
+                    name: '文本编码器加载器',
+                    parameters: {
+                        model_type: 'flux',
+                        text_encoder1: 't5xxl_fp16.safetensors',
+                        text_encoder2: 'clip_l.safetensors',
+                        t5_min_length: 512,
+                        use_4bit_t5: 'disable',
+                        int4_model: 'none'
+                    }
+                },
+                {
+                    node_id: 45,
+                    type: 'NunchakuFluxDiTLoader',
+                    name: 'Flux DiT模型加载器',
+                    parameters: {
+                        model_path: 'svdq-int4-flux.1-dev',
+                        cache_threshold: 0,
+                        attention: 'nunchaku-fp16',
+                        cpu_offload: 'auto',
+                        device_id: 0,
+                        data_type: 'bfloat16',
+                        i_2_f_mode: 'enabled'
+                    }
+                }
+            ];
+            
+            // 创建临时容器
+            const tempContainer = document.createElement('div');
+            tempContainer.id = 'tempModelLoaders';
+            document.body.appendChild(tempContainer);
+            
+            // 调用生成函数
+            generateModelLoaders(mockModelLoaders, tempContainer);
+            
+            // 检查结果
+            const generatedContent = tempContainer.innerHTML;
+            if (generatedContent.includes('NunchakuTextEncoderLoader') && generatedContent.includes('NunchakuFluxDiTLoader')) {
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        ✅ 模型加载器生成成功<br>
+                        <details>
+                            <summary>查看生成的HTML</summary>
+                            <pre>${generatedContent.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+                        </details>
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = `<div class="error">❌ 模型加载器生成失败</div>`;
+            }
+            
+            // 清理临时元素
+            document.body.removeChild(tempContainer);
+        }
+        
+        function testNegativePrompt() {
+            const resultDiv = document.getElementById('negativePromptResult');
+            
+            // 创建临时元素
+            const tempGroup = document.createElement('div');
+            tempGroup.id = 'tempNegativePromptGroup';
+            tempGroup.style.display = 'block';
+            document.body.appendChild(tempGroup);
+            
+            // 测试切换
+            toggleNegativePrompt(false, tempGroup);
+            const hidden = tempGroup.style.display === 'none';
+            
+            toggleNegativePrompt(true, tempGroup);
+            const shown = tempGroup.style.display === 'block';
+            
+            if (hidden && shown) {
+                resultDiv.innerHTML = `<div class="success">✅ Negative Prompt切换功能正常</div>`;
+            } else {
+                resultDiv.innerHTML = `<div class="error">❌ Negative Prompt切换功能异常</div>`;
+            }
+            
+            // 清理临时元素
+            document.body.removeChild(tempGroup);
+        }
+        
+        function openMainPage() {
+            window.open('/', '_blank');
+        }
+        
+        // 复制主应用的函数
+        function toggleNegativePrompt(hasNegativePrompt, element = null) {
+            const negativePromptGroup = element || document.getElementById('negativePromptGroup');
+            if (negativePromptGroup) {
+                negativePromptGroup.style.display = hasNegativePrompt ? 'block' : 'none';
+            }
+        }
+        
+        function generateModelLoaders(modelLoaders, container = null) {
+            const targetContainer = container || document.getElementById('modelLoaders');
+            if (!targetContainer) return;
+            
+            if (!modelLoaders || modelLoaders.length === 0) {
+                targetContainer.innerHTML = `
+                    <div class="no-model-loaders">
+                        <i class="fas fa-info-circle"></i>
+                        <p>此工作流没有可配置的模型加载器</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            targetContainer.innerHTML = modelLoaders.map(loader => {
+                const params = loader.parameters;
+                let paramHtml = '';
+                
+                switch (loader.type) {
+                    case 'NunchakuTextEncoderLoader':
+                        paramHtml = `
+                            <div class="form-group">
+                                <label for="model_type_${loader.node_id}">模型类型</label>
+                                <select id="model_type_${loader.node_id}" name="model_type_${loader.node_id}">
+                                    <option value="flux" ${params.model_type === 'flux' ? 'selected' : ''}>Flux</option>
+                                    <option value="sd3" ${params.model_type === 'sd3' ? 'selected' : ''}>SD3</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="text_encoder1_${loader.node_id}">文本编码器1</label>
+                                <input type="text" id="text_encoder1_${loader.node_id}" name="text_encoder1_${loader.node_id}" 
+                                       value="${params.text_encoder1 || 't5xxl_fp16.safetensors'}" placeholder="t5xxl_fp16.safetensors">
+                            </div>
+                            <div class="form-group">
+                                <label for="text_encoder2_${loader.node_id}">文本编码器2</label>
+                                <input type="text" id="text_encoder2_${loader.node_id}" name="text_encoder2_${loader.node_id}" 
+                                       value="${params.text_encoder2 || 'clip_l.safetensors'}" placeholder="clip_l.safetensors">
+                            </div>
+                        `;
+                        break;
+                        
+                    case 'NunchakuFluxDiTLoader':
+                        paramHtml = `
+                            <div class="form-group">
+                                <label for="model_path_${loader.node_id}">模型路径</label>
+                                <input type="text" id="model_path_${loader.node_id}" name="model_path_${loader.node_id}" 
+                                       value="${params.model_path || 'svdq-int4-flux.1-dev'}" placeholder="svdq-int4-flux.1-dev">
+                            </div>
+                            <div class="form-group">
+                                <label for="attention_${loader.node_id}">注意力机制</label>
+                                <select id="attention_${loader.node_id}" name="attention_${loader.node_id}">
+                                    <option value="nunchaku-fp16" ${params.attention === 'nunchaku-fp16' ? 'selected' : ''}>Nunchaku FP16</option>
+                                    <option value="flash-attn" ${params.attention === 'flash-attn' ? 'selected' : ''}>Flash Attention</option>
+                                </select>
+                            </div>
+                        `;
+                        break;
+                        
+                    default:
+                        paramHtml = `<div class="form-group"><p>未知的模型加载器类型: ${loader.type}</p></div>`;
+                }
+                
+                return `
+                    <div class="model-loader-group">
+                        <div class="loader-header">
+                            <h4>${loader.name}</h4>
+                            <span class="loader-type">${loader.type}</span>
+                        </div>
+                        <div class="loader-parameters">
+                            ${paramHtml}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+    </script>
+</body>
+</html> 

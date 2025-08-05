@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图片显示测试</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .test-container {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-image {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>图片显示测试</h1>
+        <p>测试最新的生成图片：</p>
+        
+        <div class="output-image">
+            <img src="/outputs/result_3b76f438_ComfyUI_00006_.png" alt="测试图片" class="test-image">
+            <div class="image-actions">
+                <button class="btn btn-sm btn-primary" onclick="window.open('/outputs/result_3b76f438_ComfyUI_00006_.png', '_blank')">
+                    <i class="fas fa-external-link-alt"></i> 查看大图
+                </button>
+                <button class="btn btn-sm btn-secondary" onclick="downloadImage('/outputs/result_3b76f438_ComfyUI_00006_.png')">
+                    <i class="fas fa-download"></i> 下载
+                </button>
+            </div>
+        </div>
+        
+        <div class="output-info">
+            <div class="info-item">
+                <strong>文件名:</strong> result_3b76f438_ComfyUI_00006_.png
+            </div>
+            <div class="info-item">
+                <strong>生成时间:</strong> 2025-08-04 18:54:00
+            </div>
+            <div class="info-item">
+                <strong>文件大小:</strong> 1.6 MB
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function downloadImage(imageUrl) {
+            const link = document.createElement('a');
+            link.href = imageUrl;
+            link.download = imageUrl.split('/').pop() || 'generated_image.png';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html> 
