@@ -2,6 +2,8 @@
 
 一个基于Python的Web服务项目。
 
+> 项目作者：justwjx (wjx@msn.cn)
+
 ## 项目结构
 
 ```
