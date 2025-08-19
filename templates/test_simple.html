@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>简化测试页面</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 头部 -->
+        <header class="header">
+            <div class="container">
+                <h1 class="title">
+                    <i class="fas fa-robot"></i>
+                    ComfyUI 工作流管理器 - 简化测试
+                </h1>
+            </div>
+        </header>
+
+        <!-- 主要内容 -->
+        <main class="main">
+            <div class="container">
+                <!-- 加载状态 -->
+                <div id="loadingState" class="loading-state">
+                    <div class="spinner"></div>
+                    <p>正在加载工作流...</p>
+                </div>
+
+                <!-- 错误状态 -->
+                <div id="errorState" class="error-state" style="display: none;">
+                    <div class="error-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <h3>加载失败</h3>
+                    <p id="errorMessage">无法加载工作流列表</p>
+                    <button class="btn btn-primary" onclick="app.loadWorkflows()">
+                        <i class="fas fa-redo"></i>
+                        重试
+                    </button>
+                </div>
+
+                <!-- 工作流选择页面 -->
+                <div id="workflowSelectionPage" class="workflow-selection-page" style="display: none;">
+                    <div class="page-header">
+                        <h2>工作流列表</h2>
+                        <p>找到的工作流：</p>
+                    </div>
+                    
+                    <div id="workflowCards" class="workflow-grid">
+                        <!-- 工作流卡片将在这里动态生成 -->
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/app_simple.js"></script>
+</body>
+</html>
+

@@ -1,0 +1,20 @@
+{
+  "usage_count": {
+    "nunchaku-flux.1-kontext-dev.json": 54,
+    "nunchaku-flux.1-kontext-dev-turbo_lora.json": 17,
+    "nunchaku-flux.1-dev.json": 3,
+    "nunchaku-flux.1-redux-dev.json": 5,
+    "nunchaku-flux.1-schnell.json": 2,
+    "nunchaku-flux.1-fill.json": 67,
+    "nunchaku-flux.1-outpaint.json": 3
+  },
+  "recent_usage": {
+    "nunchaku-flux.1-kontext-dev.json": "2025-08-11T19:34:42.915039",
+    "nunchaku-flux.1-kontext-dev-turbo_lora.json": "2025-08-08T22:44:05.283885",
+    "nunchaku-flux.1-dev.json": "2025-08-08T21:59:44.527963",
+    "nunchaku-flux.1-redux-dev.json": "2025-08-18T15:36:59.862284",
+    "nunchaku-flux.1-schnell.json": "2025-08-09T23:04:57.595724",
+    "nunchaku-flux.1-fill.json": "2025-08-13T16:55:10.352388",
+    "nunchaku-flux.1-outpaint.json": "2025-08-14T09:31:59.162598"
+  }
+}

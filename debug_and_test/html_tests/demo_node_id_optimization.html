@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图像输入节点ID显示优化演示</title>
+    <link rel="stylesheet" href="../static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .demo-container {
+            max-width: 1200px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .demo-section {
+            margin-bottom: 60px;
+        }
+        .demo-title {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 30px;
+            color: var(--text-primary);
+            text-align: center;
+        }
+        .comparison-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+        .comparison-panel {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            padding: 30px;
+            box-shadow: var(--shadow);
+        }
+        .panel-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: var(--text-primary);
+            text-align: center;
+        }
+        .before-panel {
+            border-left: 4px solid var(--warning-color);
+        }
+        .after-panel {
+            border-left: 4px solid var(--success-color);
+        }
+        .feature-list {
+            background: var(--bg-color);
+            border-radius: var(--border-radius);
+            padding: 20px;
+            margin-top: 30px;
+        }
+        .feature-list h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: var(--text-primary);
+        }
+        .feature-list ul {
+            list-style: none;
+            padding: 0;
+        }
+        .feature-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+        .feature-list i {
+            color: var(--success-color);
+            font-size: 16px;
+        }
+        @media (max-width: 768px) {
+            .comparison-container {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <h1 class="demo-title">🎯 图像输入节点ID显示优化</h1>
+        
+        <div class="demo-section">
+            <div class="comparison-container">
+                <!-- 优化前 -->
+                <div class="comparison-panel before-panel">
+                    <h2 class="panel-title">❌ 优化前</h2>
+                    <div id="beforeOptimization">
+                        <!-- 优化前的图像输入节点 -->
+                    </div>
+                </div>
+                
+                <!-- 优化后 -->
+                <div class="comparison-panel after-panel">
+                    <h2 class="panel-title">✅ 优化后</h2>
+                    <div id="afterOptimization">
+                        <!-- 优化后的图像输入节点 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="feature-list">
+            <h3>🚀 优化特性</h3>
+            <ul>
+                <li><i class="fas fa-check-circle"></i> <strong>智能显示：</strong>只有当存在多个图像输入节点时才显示节点ID</li>
+                <li><i class="fas fa-check-circle"></i> <strong>清晰标识：</strong>使用较小的字体和特殊样式显示节点ID</li>
+                <li><i class="fas fa-check-circle"></i> <strong>用户友好：</strong>帮助用户区分不同的图像输入节点</li>
+                <li><i class="fas fa-check-circle"></i> <strong>保持简洁：</strong>单个图像输入节点时不会显示冗余信息</li>
+                <li><i class="fas fa-check-circle"></i> <strong>响应式设计：</strong>在不同屏幕尺寸下都能良好显示</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // 模拟多个图像输入节点数据（基于实际工作流）
+        const multipleImageInputs = [
+            {
+                node_id: "147",
+                name: "主图像输入",
+                type: "image",
+                required: true,
+                description: "输入主要图像，用于图像生成的基础"
+            },
+            {
+                node_id: "142",
+                name: "参考图像",
+                type: "image",
+                required: false,
+                description: "输入参考图像，用于风格或内容参考"
+            }
+        ];
+
+        // 优化前的生成函数（不显示节点ID）
+        function generateImageInputsBefore(imageInputs, containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            
+            container.innerHTML = imageInputs.map(input => `
+                <div class="image-input-group">
+                    <div class="input-header">
+                        <h4>${input.name}</h4>
+                        <span class="input-type">${input.type}</span>
+                        ${input.required ? '<span class="required-badge">必需</span>' : '<span class="optional-badge">可选</span>'}
+                    </div>
+                    <p class="input-description">${input.description}</p>
+                    <div class="image-selector">
+                        <button type="button" class="btn btn-secondary">
+                            <i class="fas fa-image"></i>
+                            选择图像
+                        </button>
+                        <div class="selected-image" id="selected-${input.node_id}" style="display: none;">
+                            <img src="" alt="已选择的图像" id="preview-${input.node_id}">
+                            <button type="button" class="btn btn-sm btn-secondary">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 优化后的生成函数（显示节点ID）
+        function generateImageInputsAfter(imageInputs, containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            
+            // 检查是否有多个图像输入节点
+            const showNodeIds = imageInputs.length > 1;
+            
+            container.innerHTML = imageInputs.map(input => `
+                <div class="image-input-group">
+                    <div class="input-header">
+                        <h4>${input.name}</h4>
+                        ${showNodeIds ? `<span class="node-id-badge">节点ID: ${input.node_id}</span>` : ''}
+                        <span class="input-type">${input.type}</span>
+                        ${input.required ? '<span class="required-badge">必需</span>' : '<span class="optional-badge">可选</span>'}
+                    </div>
+                    <p class="input-description">${input.description}</p>
+                    <div class="image-selector">
+                        <button type="button" class="btn btn-secondary">
+                            <i class="fas fa-image"></i>
+                            选择图像
+                        </button>
+                        <div class="selected-image" id="selected-${input.node_id}" style="display: none;">
+                            <img src="" alt="已选择的图像" id="preview-${input.node_id}">
+                            <button type="button" class="btn btn-sm btn-secondary">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 页面加载时生成演示内容
+        document.addEventListener('DOMContentLoaded', function() {
+            generateImageInputsBefore(multipleImageInputs, 'beforeOptimization');
+            generateImageInputsAfter(multipleImageInputs, 'afterOptimization');
+        });
+    </script>
+</body>
+</html> 

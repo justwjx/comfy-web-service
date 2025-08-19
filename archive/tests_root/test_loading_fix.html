@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>加载修复测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .loading { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        #log { background: #f8f9fa; padding: 10px; border-radius: 5px; font-family: monospace; max-height: 300px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <h1>ComfyUI 工作流管理器 - 加载修复测试</h1>
+    
+    <div class="test-section">
+        <h3>API 连接测试</h3>
+        <button onclick="testAPI()">测试 API 连接</button>
+        <div id="apiResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>工作流加载测试</h3>
+        <button onclick="testWorkflowLoading()">测试工作流加载</button>
+        <div id="workflowResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>超时测试</h3>
+        <button onclick="testTimeout()">测试超时处理</button>
+        <div id="timeoutResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>控制台日志</h3>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        async function testAPI() {
+            const resultDiv = document.getElementById('apiResult');
+            resultDiv.innerHTML = '<div class="loading">测试中...</div>';
+            
+            try {
+                log('开始测试 API 连接...');
+                const response = await fetch('/api/workflows');
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.innerHTML = `<div class="success">✅ API 连接成功！找到 ${data.workflows.length} 个工作流</div>`;
+                    log(`API 测试成功: ${data.workflows.length} 个工作流`);
+                } else {
+                    resultDiv.innerHTML = `<div class="error">❌ API 返回错误: ${data.error || '未知错误'}</div>`;
+                    log(`API 测试失败: ${data.error}`);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ API 连接失败: ${error.message}</div>`;
+                log(`API 测试异常: ${error.message}`);
+            }
+        }
+
+        async function testWorkflowLoading() {
+            const resultDiv = document.getElementById('workflowResult');
+            resultDiv.innerHTML = '<div class="loading">测试中...</div>';
+            
+            try {
+                log('开始测试工作流加载...');
+                
+                // 模拟超时处理
+                const timeout = 5000;
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), timeout);
+                
+                const response = await fetch('/api/workflows', { signal: controller.signal });
+                clearTimeout(timeoutId);
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.innerHTML = `<div class="success">✅ 工作流加载成功！用时 ${Date.now() - startTime}ms</div>`;
+                    log(`工作流加载成功: ${data.workflows.length} 个工作流`);
+                } else {
+                    resultDiv.innerHTML = `<div class="error">❌ 工作流加载失败: ${data.error}</div>`;
+                    log(`工作流加载失败: ${data.error}`);
+                }
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    resultDiv.innerHTML = `<div class="error">❌ 工作流加载超时 (${timeout}ms)</div>`;
+                    log(`工作流加载超时: ${timeout}ms`);
+                } else {
+                    resultDiv.innerHTML = `<div class="error">❌ 工作流加载异常: ${error.message}</div>`;
+                    log(`工作流加载异常: ${error.message}`);
+                }
+            }
+        }
+
+        async function testTimeout() {
+            const resultDiv = document.getElementById('timeoutResult');
+            resultDiv.innerHTML = '<div class="loading">测试中...</div>';
+            
+            try {
+                log('开始测试超时处理...');
+                
+                // 创建一个会超时的请求
+                const timeout = 1000; // 1秒超时
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), timeout);
+                
+                // 模拟一个慢请求
+                const slowPromise = new Promise((resolve) => {
+                    setTimeout(() => resolve('slow response'), 3000);
+                });
+                
+                const response = await Promise.race([
+                    slowPromise,
+                    new Promise((_, reject) => {
+                        setTimeout(() => reject(new Error('AbortError')), timeout);
+                    })
+                ]);
+                
+                clearTimeout(timeoutId);
+                
+                resultDiv.innerHTML = `<div class="error">❌ 超时测试失败：应该超时但没有</div>`;
+                log('超时测试失败：应该超时但没有');
+                
+            } catch (error) {
+                if (error.message === 'AbortError') {
+                    resultDiv.innerHTML = `<div class="success">✅ 超时处理正常！请求在 ${timeout}ms 后正确超时</div>`;
+                    log(`超时测试成功: ${timeout}ms 后正确超时`);
+                } else {
+                    resultDiv.innerHTML = `<div class="error">❌ 超时测试异常: ${error.message}</div>`;
+                    log(`超时测试异常: ${error.message}`);
+                }
+            }
+        }
+
+        // 页面加载时自动运行基础测试
+        window.addEventListener('load', () => {
+            log('页面加载完成，开始基础测试...');
+            setTimeout(testAPI, 1000);
+        });
+    </script>
+</body>
+</html>

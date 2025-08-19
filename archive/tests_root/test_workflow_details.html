@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工作流详情加载测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .loading { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        #log { background: #f8f9fa; padding: 10px; border-radius: 5px; font-family: monospace; max-height: 300px; overflow-y: auto; }
+        .workflow-item { padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 3px; cursor: pointer; }
+        .workflow-item:hover { background-color: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <h1>工作流详情加载测试</h1>
+    
+    <div class="test-section">
+        <h3>工作流列表</h3>
+        <button onclick="loadWorkflows()">加载工作流列表</button>
+        <div id="workflowList"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>工作流详情测试</h3>
+        <div id="workflowDetails"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>控制台日志</h3>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        async function loadWorkflows() {
+            const listDiv = document.getElementById('workflowList');
+            listDiv.innerHTML = '<div class="loading">加载中...</div>';
+            
+            try {
+                log('开始加载工作流列表...');
+                const response = await fetch('/api/workflows');
+                const data = await response.json();
+                
+                if (data.success) {
+                    log(`成功加载 ${data.workflows.length} 个工作流`);
+                    listDiv.innerHTML = data.workflows.map(workflow => `
+                        <div class="workflow-item" onclick="testWorkflowDetails('${workflow.filename}')">
+                            <strong>${workflow.name}</strong><br>
+                            <small>${workflow.filename}</small>
+                        </div>
+                    `).join('');
+                } else {
+                    listDiv.innerHTML = `<div class="error">加载失败: ${data.error}</div>`;
+                    log(`加载失败: ${data.error}`);
+                }
+            } catch (error) {
+                listDiv.innerHTML = `<div class="error">请求失败: ${error.message}</div>`;
+                log(`请求失败: ${error.message}`);
+            }
+        }
+
+        async function testWorkflowDetails(filename) {
+            const detailsDiv = document.getElementById('workflowDetails');
+            detailsDiv.innerHTML = '<div class="loading">加载工作流详情中...</div>';
+            
+            try {
+                log(`开始加载工作流详情: ${filename}`);
+                
+                // 添加超时处理
+                const timeout = 15000;
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), timeout);
+                
+                const response = await fetch(`/api/analyze-workflow/${encodeURIComponent(filename)}`, { 
+                    signal: controller.signal 
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                log('工作流详情数据加载成功');
+                
+                if (data.success) {
+                    const analysis = data.analysis;
+                    detailsDiv.innerHTML = `
+                        <div class="success">
+                            <h4>✅ 工作流详情加载成功</h4>
+                            <p><strong>类型:</strong> ${analysis.type}</p>
+                            <p><strong>文生图:</strong> ${analysis.has_text_to_image ? '是' : '否'}</p>
+                            <p><strong>图生图:</strong> ${analysis.has_image_to_image ? '是' : '否'}</p>
+                            <p><strong>ControlNet:</strong> ${analysis.has_controlnet ? '是' : '否'}</p>
+                            <p><strong>模型加载器数量:</strong> ${analysis.model_loaders?.length || 0}</p>
+                            <p><strong>节点组数量:</strong> ${analysis.node_groups?.length || 0}</p>
+                            <p><strong>默认值:</strong> ${Object.keys(analysis.default_values || {}).length} 个</p>
+                        </div>
+                    `;
+                    log('工作流详情显示成功');
+                } else {
+                    throw new Error(data.error || '获取工作流详情失败');
+                }
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    detailsDiv.innerHTML = `<div class="error">❌ 加载超时 (${timeout}ms)</div>`;
+                    log(`加载超时: ${timeout}ms`);
+                } else {
+                    detailsDiv.innerHTML = `<div class="error">❌ 加载失败: ${error.message}</div>`;
+                    log(`加载失败: ${error.message}`);
+                }
+            }
+        }
+
+        // 页面加载时自动加载工作流列表
+        window.addEventListener('load', () => {
+            log('页面加载完成，开始测试...');
+            setTimeout(loadWorkflows, 1000);
+        });
+    </script>
+</body>
+</html>

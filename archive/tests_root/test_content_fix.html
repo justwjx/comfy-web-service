@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>内容渲染修复测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .loading { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        #log { background: #f8f9fa; padding: 10px; border-radius: 5px; font-family: monospace; max-height: 300px; overflow-y: auto; }
+        .workflow-item { padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 3px; cursor: pointer; }
+        .workflow-item:hover { background-color: #f0f0f0; }
+        .content-preview { background: #f8f9fa; padding: 10px; border-radius: 5px; margin: 10px 0; max-height: 200px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <h1>内容渲染修复测试</h1>
+    
+    <div class="test-section">
+        <h3>工作流详情内容测试</h3>
+        <button onclick="loadWorkflows()">加载工作流列表</button>
+        <div id="workflowList"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>内容渲染测试</h3>
+        <div id="contentTest"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>控制台日志</h3>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        async function loadWorkflows() {
+            const listDiv = document.getElementById('workflowList');
+            listDiv.innerHTML = '<div class="loading">加载中...</div>';
+            
+            try {
+                log('开始加载工作流列表...');
+                const response = await fetch('/api/workflows');
+                const data = await response.json();
+                
+                if (data.success) {
+                    log(`成功加载 ${data.workflows.length} 个工作流`);
+                    listDiv.innerHTML = data.workflows.map(workflow => `
+                        <div class="workflow-item" onclick="testWorkflowContent('${workflow.filename}')">
+                            <strong>${workflow.name}</strong><br>
+                            <small>${workflow.filename}</small>
+                        </div>
+                    `).join('');
+                } else {
+                    listDiv.innerHTML = `<div class="error">加载失败: ${data.error}</div>`;
+                    log(`加载失败: ${data.error}`);
+                }
+            } catch (error) {
+                listDiv.innerHTML = `<div class="error">请求失败: ${error.message}</div>`;
+                log(`请求失败: ${error.message}`);
+            }
+        }
+
+        async function testWorkflowContent(filename) {
+            const testDiv = document.getElementById('contentTest');
+            testDiv.innerHTML = '<div class="loading">测试内容渲染中...</div>';
+            
+            try {
+                log(`开始测试工作流内容: ${filename}`);
+                
+                // 获取工作流详情
+                const response = await fetch(`/api/analyze-workflow/${encodeURIComponent(filename)}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const analysis = data.analysis;
+                    log('工作流详情获取成功');
+                    
+                    // 测试内容渲染
+                    const contentHtml = `
+                        <div class="content-preview">
+                            <h4>工作流分析结果:</h4>
+                            <p><strong>类型:</strong> ${analysis.type}</p>
+                            <p><strong>文生图:</strong> ${analysis.has_text_to_image ? '是' : '否'}</p>
+                            <p><strong>图生图:</strong> ${analysis.has_image_to_image ? '是' : '否'}</p>
+                            <p><strong>ControlNet:</strong> ${analysis.has_controlnet ? '是' : '否'}</p>
+                            <p><strong>模型加载器数量:</strong> ${analysis.model_loaders?.length || 0}</p>
+                            <p><strong>节点组数量:</strong> ${analysis.node_groups?.length || 0}</p>
+                            <p><strong>默认值数量:</strong> ${Object.keys(analysis.default_values || {}).length}</p>
+                            
+                            <h4>默认值预览:</h4>
+                            <pre>${JSON.stringify(analysis.default_values, null, 2)}</pre>
+                            
+                            <h4>模型加载器预览:</h4>
+                            <pre>${JSON.stringify(analysis.model_loaders, null, 2)}</pre>
+                            
+                            <h4>节点组预览:</h4>
+                            <pre>${JSON.stringify(analysis.node_groups, null, 2)}</pre>
+                        </div>
+                    `;
+                    
+                    testDiv.innerHTML = `
+                        <div class="success">
+                            <h4>✅ 内容渲染测试成功</h4>
+                            ${contentHtml}
+                        </div>
+                    `;
+                    
+                    log('内容渲染测试完成');
+                } else {
+                    testDiv.innerHTML = `<div class="error">❌ 获取工作流详情失败: ${data.error}</div>`;
+                    log(`获取工作流详情失败: ${data.error}`);
+                }
+                
+            } catch (error) {
+                testDiv.innerHTML = `<div class="error">❌ 测试失败: ${error.message}</div>`;
+                log(`测试失败: ${error.message}`);
+            }
+        }
+
+        // 页面加载时自动加载工作流列表
+        window.addEventListener('load', () => {
+            log('页面加载完成，开始内容渲染测试...');
+            setTimeout(loadWorkflows, 1000);
+        });
+    </script>
+</body>
+</html>

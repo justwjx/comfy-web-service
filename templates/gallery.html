@@ -17,6 +17,27 @@
         .gallery-header {
             text-align: center;
             margin-bottom: 30px;
+            position: relative;
+        }
+        
+        .gallery-header-nav {
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+        
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            text-decoration: none;
+            transition: var(--transition);
+        }
+        
+        .back-btn:hover {
+            transform: translateX(-2px);
+            text-decoration: none;
         }
         
         .gallery-header h1 {
@@ -204,13 +225,81 @@
             right: 20px;
             z-index: 100;
         }
+        
+        /* 批量操作样式 */
+        .batch-actions {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            padding: 12px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--shadow);
+        }
+        
+        .batch-info {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        
+        .batch-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .batch-buttons .btn {
+            padding: 6px 12px;
+            font-size: 13px;
+        }
+        
+        /* 图片选择样式 */
+        .gallery-item.selected {
+            box-shadow: 0 0 0 3px var(--primary-color);
+            transform: scale(0.98);
+        }
+        
+        .gallery-item-checkbox {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        
+        .gallery-item-checkbox input[type="checkbox"] {
+            margin: 0;
+            cursor: pointer;
+        }
+        
+        .gallery-item {
+            position: relative;
+        }
     </style>
 </head>
 <body>
     <div class="gallery-container">
         <div class="gallery-header">
+            <div class="gallery-header-nav">
+                <a href="/" class="btn btn-secondary back-btn">
+                    <i class="fas fa-arrow-left"></i>
+                    返回工作流
+                </a>
+            </div>
             <h1><i class="fas fa-images"></i> 生成图片画廊</h1>
             <p>查看所有通过ComfyUI生成的图片</p>
+            <div style="font-size:11px;color:var(--text-secondary);opacity:.8;margin-top:6px;">
+                小贴士：点击图片可新窗口查看原图；点击“参数”可展开生成时的提示词与模型配置。
+            </div>
         </div>
         
         <div class="gallery-stats" id="galleryStats">
@@ -221,6 +310,27 @@
             <div class="stat-item">
                 <i class="fas fa-clock"></i>
                 <span id="latestImage">-</span>
+            </div>
+        </div>
+        
+        <!-- 批量操作栏 -->
+        <div class="batch-actions" id="batchActions" style="display: none;">
+            <div class="batch-info">
+                <span id="selectedCount">0</span> 张图片已选中
+            </div>
+            <div class="batch-buttons">
+                <button class="btn btn-secondary btn-sm" onclick="selectAllImages()">
+                    <i class="fas fa-check-square"></i>
+                    全选
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="clearSelection()">
+                    <i class="fas fa-times"></i>
+                    清除选择
+                </button>
+                <button class="btn btn-danger btn-sm" onclick="deleteSelectedImages()">
+                    <i class="fas fa-trash"></i>
+                    删除选中
+                </button>
             </div>
         </div>
         
@@ -250,6 +360,10 @@
     </div>
 
     <script>
+        // 全局变量
+        let selectedImages = new Set();
+        let allImages = [];
+        
         async function loadGallery() {
             const galleryContent = document.getElementById('galleryContent');
             const totalImages = document.getElementById('totalImages');
@@ -268,6 +382,7 @@
                 
                 if (data.success) {
                     const images = data.images;
+                    allImages = images; // 保存到全局变量
                     
                     // 更新统计信息
                     totalImages.textContent = data.total;
@@ -318,12 +433,26 @@
                             
                             // 检查是否有模型信息
                             let modelInfo = '';
-                            if (image.metadata && image.metadata.parameters && image.metadata.parameters.model_loaders) {
-                                const modelLoaders = image.metadata.parameters.model_loaders;
-                                // 提取主要模型信息
-                                const mainModel = modelLoaders.model_path_45 || modelLoaders.model_type_44 || 'N/A';
-                                const vae = modelLoaders.vae_name_10 || 'N/A';
-                                modelInfo = `<div class="parameter-item"><span class="parameter-label">Model:</span><span class="parameter-value">${mainModel}</span></div>`;
+                            // 兼容：优先读取新的 model_summary / 其次读取 model_loaders(by_node)
+                            if (image.metadata) {
+                                if (image.metadata.model_summary) {
+                                    const ms = image.metadata.model_summary;
+                                    const mainModel = ms.main_model || 'N/A';
+                                    const vae = ms.vae || null;
+                                    const loras = Array.isArray(ms.loras) ? ms.loras.filter(Boolean) : [];
+                                    modelInfo = `<div class="parameter-item"><span class="parameter-label">Model:</span><span class="parameter-value">${mainModel}${vae ? ` | VAE: ${vae}` : ''}${loras.length ? ` | LoRA: ${loras.slice(0,2).join(', ')}${loras.length>2?'…':''}` : ''}</span></div>`;
+                                } else if (image.metadata.model_loaders) {
+                                    const ml = image.metadata.model_loaders; // by_node 展开
+                                    const mainModel = ml.model_path_45 || ml.ckpt_name_45 || ml.model_type_44 || 'N/A';
+                                    const vae = ml.vae_name_10 || null;
+                                    modelInfo = `<div class="parameter-item"><span class="parameter-label">Model:</span><span class="parameter-value">${mainModel}${vae ? ` | VAE: ${vae}` : ''}</span></div>`;
+                                } else if (image.metadata.parameters && image.metadata.parameters.model_loaders) {
+                                    // 旧结构向后兼容
+                                    const ml = image.metadata.parameters.model_loaders;
+                                    const mainModel = ml.model_path_45 || ml.ckpt_name_45 || ml.model_type_44 || 'N/A';
+                                    const vae = ml.vae_name_10 || null;
+                                    modelInfo = `<div class="parameter-item"><span class="parameter-label">Model:</span><span class="parameter-value">${mainModel}${vae ? ` | VAE: ${vae}` : ''}</span></div>`;
+                                }
                             }
                             
                             parametersHtml = `
@@ -339,6 +468,9 @@
                         }
                         
                         item.innerHTML = `
+                            <div class="gallery-item-checkbox">
+                                <input type="checkbox" onchange="toggleImageSelection('${image.filename}', this)" />
+                            </div>
                             <img src="${image.url}" alt="${image.filename}" onclick="viewImage('${image.url}')">
                             <div class="gallery-item-info">
                                 <div class="gallery-item-title">${image.filename}</div>
@@ -357,6 +489,9 @@
                                     </button>` : ''}
                                     <button class="btn btn-sm btn-secondary" onclick="downloadImage('${image.url}')">
                                         <i class="fas fa-download"></i> 下载
+                                    </button>
+                                    <button class="btn btn-sm btn-danger" onclick="deleteImage('${image.filename}')">
+                                        <i class="fas fa-trash"></i> 删除
                                     </button>
                                 </div>
                             </div>
@@ -400,92 +535,49 @@
             document.body.removeChild(link);
         }
         
-        // 按节点分组模型加载器信息
+        // 通用分组（不依赖固定节点ID），更好适配不同工作流
         function groupModelLoaders(modelLoaders) {
             const groups = {
-                'vae': [],
-                'text_encoder': [],
-                'main_model': [],
-                'lora_1': [],
-                'lora_2': []
+                vae: [],
+                main_model: [],
+                text_encoder: [],
+                lora: [],
+                other: []
             };
-            
-            // 定义节点映射
-            const nodeMappings = {
-                '10': 'vae',
-                '44': 'text_encoder', 
-                '45': 'main_model',
-                '46': 'lora_1',
-                '47': 'lora_2'
-            };
-            
-            // 按节点分组
+
             Object.entries(modelLoaders).forEach(([key, value]) => {
-                // 提取节点编号
-                const nodeMatch = key.match(/_(\d+)$/);
-                if (nodeMatch) {
-                    const nodeId = nodeMatch[1];
-                    const groupKey = nodeMappings[nodeId];
-                    if (groupKey) {
-                        groups[groupKey].push({ key, value });
-                    }
+                const lower = String(key).toLowerCase();
+                if (lower.startsWith('vae_name_')) {
+                    groups.vae.push({ key, value });
+                } else if (lower.startsWith('model_path_') || lower.startsWith('ckpt_name_')) {
+                    groups.main_model.push({ key, value });
+                } else if (lower.startsWith('clip_name') || lower.startsWith('text_encoder')) {
+                    groups.text_encoder.push({ key, value });
+                } else if (lower.startsWith('lora_name_')) {
+                    groups.lora.push({ key, value });
+                } else {
+                    groups.other.push({ key, value });
                 }
             });
-            
-            // 生成分组HTML
+
             let html = '';
-            
-            // VAE节点 (10)
-            if (groups.vae.length > 0) {
-                html += '<div style="margin-bottom: 15px;"><h4 style="color: #007bff; margin: 0 0 8px 0; font-size: 14px;">🔧 VAE节点 (节点10)</h4>';
-                groups.vae.forEach(({ key, value }) => {
-                    const cleanKey = key.replace('_10', '').replace(/_/g, ' ');
-                    html += `<div style="margin: 2px 0;"><strong>${cleanKey}:</strong> ${value}</div>`;
+            const renderBlock = (title, color, items) => {
+                if (!items || items.length === 0) return '';
+                let block = `<div style="margin-bottom: 15px;"><h4 style="color: ${color}; margin: 0 0 8px 0; font-size: 14px;">${title}</h4>`;
+                items.forEach(({ key, value }) => {
+                    block += `<div style="margin: 2px 0;"><strong>${key.replace(/_/g, ' ')}:</strong> ${value}</div>`;
                 });
-                html += '</div>';
-            }
-            
-            // 文本编码器节点 (44)
-            if (groups.text_encoder.length > 0) {
-                html += '<div style="margin-bottom: 15px;"><h4 style="color: #28a745; margin: 0 0 8px 0; font-size: 14px;">📝 文本编码器节点 (节点44)</h4>';
-                groups.text_encoder.forEach(({ key, value }) => {
-                    const cleanKey = key.replace('_44', '').replace(/_/g, ' ');
-                    html += `<div style="margin: 2px 0;"><strong>${cleanKey}:</strong> ${value}</div>`;
-                });
-                html += '</div>';
-            }
-            
-            // 主模型节点 (45)
-            if (groups.main_model.length > 0) {
-                html += '<div style="margin-bottom: 15px;"><h4 style="color: #dc3545; margin: 0 0 8px 0; font-size: 14px;">🤖 主模型节点 (节点45)</h4>';
-                groups.main_model.forEach(({ key, value }) => {
-                    const cleanKey = key.replace('_45', '').replace(/_/g, ' ');
-                    html += `<div style="margin: 2px 0;"><strong>${cleanKey}:</strong> ${value}</div>`;
-                });
-                html += '</div>';
-            }
-            
-            // LoRA 1节点 (46)
-            if (groups.lora_1.length > 0) {
-                html += '<div style="margin-bottom: 15px;"><h4 style="color: #ffc107; margin: 0 0 8px 0; font-size: 14px;">🎨 LoRA 1节点 (节点46)</h4>';
-                groups.lora_1.forEach(({ key, value }) => {
-                    const cleanKey = key.replace('_46', '').replace(/_/g, ' ');
-                    html += `<div style="margin: 2px 0;"><strong>${cleanKey}:</strong> ${value}</div>`;
-                });
-                html += '</div>';
-            }
-            
-            // LoRA 2节点 (47)
-            if (groups.lora_2.length > 0) {
-                html += '<div style="margin-bottom: 15px;"><h4 style="color: #17a2b8; margin: 0 0 8px 0; font-size: 14px;">🎨 LoRA 2节点 (节点47)</h4>';
-                groups.lora_2.forEach(({ key, value }) => {
-                    const cleanKey = key.replace('_47', '').replace(/_/g, ' ');
-                    html += `<div style="margin: 2px 0;"><strong>${cleanKey}:</strong> ${value}</div>`;
-                });
-                html += '</div>';
-            }
-            
-            return html;
+                block += '</div>';
+                return block;
+            };
+
+            html += renderBlock('🔧 VAE', '#007bff', groups.vae);
+            html += renderBlock('🤖 主模型', '#dc3545', groups.main_model);
+            html += renderBlock('📝 文本编码器', '#28a745', groups.text_encoder);
+            html += renderBlock('🎨 LoRA', '#ffc107', groups.lora);
+            html += renderBlock('📦 其他', '#6c757d', groups.other);
+
+            return html || '<div style="color: var(--text-secondary);">无可展示的模型配置</div>';
         }
         
         async function viewMetadata(filename) {
@@ -600,6 +692,55 @@
                         `;
                     }
                     
+                    // 模型摘要（优先显示）
+                    if (metadata.model_summary) {
+                        const ms = metadata.model_summary;
+                        const loras = Array.isArray(ms.loras) ? ms.loras.filter(Boolean) : [];
+                        html += `
+                            <div class="metadata-section">
+                                <h3><i class="fas fa-layer-group"></i> 模型加载器（摘要）</h3>
+                                <div class="metadata-grid">
+                                    <div class="metadata-item">
+                                        <div class="metadata-item-label">主模型</div>
+                                        <div class="metadata-item-value">${ms.main_model || 'N/A'}</div>
+                                    </div>
+                                    <div class="metadata-item">
+                                        <div class="metadata-item-label">VAE</div>
+                                        <div class="metadata-item-value">${ms.vae || 'N/A'}</div>
+                                    </div>
+                                    ${loras.length ? `
+                                    <div class="metadata-item">
+                                        <div class="metadata-item-label">LoRA</div>
+                                        <div class="metadata-item-value">${loras.join(', ')}</div>
+                                    </div>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    }
+
+                    // 详细模型加载器（by_node 提示）
+                    if (metadata.model_loaders && typeof metadata.model_loaders === 'object') {
+                        const groupedModelLoaders = groupModelLoaders(metadata.model_loaders);
+                        html += `
+                            <div class="metadata-section">
+                                <h3><i class="fas fa-tools"></i> 模型加载器（详细）</h3>
+                                <div class="metadata-grid">
+                                    <div class="metadata-item" style="grid-column: 1 / -1;">
+                                        <div class="metadata-item-label">按节点分组</div>
+                                        <div class="metadata-item-value">
+                                            <details open>
+                                                <summary>点击折叠/展开</summary>
+                                                <div style="margin-top: 10px; padding: 10px; background: var(--bg-color); border-radius: 4px; font-size: 12px;">
+                                                    ${groupedModelLoaders}
+                                                </div>
+                                            </details>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+
                     // 技术信息
                     html += `
                         <div class="metadata-section">
@@ -645,6 +786,122 @@
             const modal = document.getElementById('metadataModal');
             if (event.target === modal) {
                 modal.style.display = 'none';
+            }
+        }
+        
+        // 图片选择功能
+        function toggleImageSelection(filename, checkbox) {
+            if (checkbox.checked) {
+                selectedImages.add(filename);
+                checkbox.closest('.gallery-item').classList.add('selected');
+            } else {
+                selectedImages.delete(filename);
+                checkbox.closest('.gallery-item').classList.remove('selected');
+            }
+            updateBatchActions();
+        }
+        
+        function selectAllImages() {
+            const checkboxes = document.querySelectorAll('.gallery-item-checkbox input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = true;
+                const filename = checkbox.getAttribute('onchange').match(/'([^']+)'/)[1];
+                selectedImages.add(filename);
+                checkbox.closest('.gallery-item').classList.add('selected');
+            });
+            updateBatchActions();
+        }
+        
+        function clearSelection() {
+            const checkboxes = document.querySelectorAll('.gallery-item-checkbox input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = false;
+                checkbox.closest('.gallery-item').classList.remove('selected');
+            });
+            selectedImages.clear();
+            updateBatchActions();
+        }
+        
+        function updateBatchActions() {
+            const batchActions = document.getElementById('batchActions');
+            const selectedCount = document.getElementById('selectedCount');
+            
+            if (selectedImages.size > 0) {
+                batchActions.style.display = 'flex';
+                selectedCount.textContent = selectedImages.size;
+            } else {
+                batchActions.style.display = 'none';
+            }
+        }
+        
+        // 删除单个图片
+        async function deleteImage(filename) {
+            if (!confirm(`确定要删除图片 "${filename}" 吗？此操作不可撤销。`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/delete-image', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        filename: filename
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('图片删除成功！');
+                    loadGallery(); // 重新加载画廊
+                } else {
+                    alert('删除失败: ' + (data.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('删除图片失败:', error);
+                alert('删除失败: ' + error.message);
+            }
+        }
+        
+        // 删除选中的图片
+        async function deleteSelectedImages() {
+            if (selectedImages.size === 0) {
+                alert('请先选择要删除的图片');
+                return;
+            }
+            
+            const count = selectedImages.size;
+            if (!confirm(`确定要删除选中的 ${count} 张图片吗？此操作不可撤销。`)) {
+                return;
+            }
+            
+            const filenames = Array.from(selectedImages);
+            
+            try {
+                const response = await fetch('/api/delete-images', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        filenames: filenames
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`成功删除 ${data.deleted_count} 张图片！`);
+                    selectedImages.clear();
+                    loadGallery(); // 重新加载画廊
+                } else {
+                    alert('删除失败: ' + (data.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('批量删除失败:', error);
+                alert('删除失败: ' + error.message);
             }
         }
         

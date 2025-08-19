@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>简单工作流加载测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .loading { background: #d1ecf1; color: #0c5460; }
+        .workflow-list { margin-top: 20px; }
+        .workflow-item { padding: 10px; border: 1px solid #ddd; margin: 5px 0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>简单工作流加载测试</h1>
+    
+    <div id="status" class="status loading">正在初始化...</div>
+    
+    <button onclick="loadWorkflows()">加载工作流</button>
+    <button onclick="clearResults()">清空结果</button>
+    
+    <div id="results" class="workflow-list"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const status = document.getElementById('status');
+            const results = document.getElementById('results');
+            
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+            logEntry.className = `status ${type}`;
+            
+            results.appendChild(logEntry);
+            status.textContent = message;
+            status.className = `status ${type}`;
+            
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        async function loadWorkflows() {
+            try {
+                log('开始加载工作流...', 'loading');
+                
+                const response = await fetch('/api/workflows');
+                log(`API响应状态: ${response.status}`, response.ok ? 'success' : 'error');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                log(`API响应成功，工作流数量: ${data.workflows?.length || 0}`, 'success');
+                
+                if (data.workflows && data.workflows.length > 0) {
+                    log('显示工作流列表:', 'success');
+                    data.workflows.forEach((workflow, index) => {
+                        const workflowItem = document.createElement('div');
+                        workflowItem.className = 'workflow-item';
+                        workflowItem.innerHTML = `
+                            <strong>${index + 1}. ${workflow.name}</strong><br>
+                            文件: ${workflow.filename}<br>
+                            描述: ${workflow.description}<br>
+                            大小: ${workflow.file_size}
+                        `;
+                        document.getElementById('results').appendChild(workflowItem);
+                    });
+                }
+                
+            } catch (error) {
+                log(`加载失败: ${error.message}`, 'error');
+                console.error('加载错误:', error);
+            }
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+            log('结果已清空', 'info');
+        }
+
+        // 页面加载时自动测试
+        window.addEventListener('load', () => {
+            log('页面加载完成，开始自动测试...', 'loading');
+            setTimeout(loadWorkflows, 1000);
+        });
+    </script>
+</body>
+</html>

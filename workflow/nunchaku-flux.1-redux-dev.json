@@ -1065,7 +1065,7 @@
         "Node name for S&R": "NunchakuFluxDiTLoader"
       },
       "widgets_values": [
-        "svdq-fp4-flux.1-dev",
+        "svdq-int4-flux.1-dev",
         0,
         "nunchaku-fp16",
         "auto",

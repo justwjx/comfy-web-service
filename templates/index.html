@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ComfyUI工作流管理器</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/style.css?v={{ cache_bust }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
@@ -22,6 +22,10 @@
                         <i class="fas fa-images"></i>
                         图片画廊
                     </a>
+                    <a href="/prompt-manager" class="btn btn-secondary" style="margin-right: 10px;">
+                        <i class="fas fa-magic"></i>
+                        提示词库
+                    </a>
                     <div class="status-indicator" id="serverStatus">
                         <span class="status-dot"></span>
                         <span class="status-text">连接中...</span>
@@ -29,6 +33,28 @@
                 </div>
             </div>
         </header>
+
+        <!-- 顶部资源监控条（置于蓝色头部之下） -->
+        <div id="resourceMonitor" class="topbar-monitor" style="display: none;">
+            <div class="container">
+                <!-- 移动端芯片视图 -->
+                <div class="rm-chips" id="rmChips" style="display:none;"></div>
+                <!-- 桌面视图下的行内紧凑视图 -->
+                <div class="rm-inline" id="rmInline">
+                    <span class="rm-inline-item">CPU <span id="cpuText">0%</span>
+                        <span class="rm-inline-bar"><span class="rm-inline-fill" id="cpuBar"></span></span>
+                    </span>
+                    <span class="rm-inline-item">内存 <span id="memText">0%</span>
+                        <span class="rm-inline-bar"><span class="rm-inline-fill" id="memBar"></span></span>
+                    </span>
+                    <span id="rmInlineGpus" class="rm-inline"></span>
+                    <div class="rm-actions">
+                        <button id="rmRefreshBtn" class="btn btn-sm btn-secondary" onclick="app.toggleResourceAutoRefresh()">刷新</button>
+                        <button class="btn btn-sm btn-secondary" onclick="app.cleanVRAM()">清理</button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- 主要内容 -->
         <main class="main">
@@ -62,6 +88,9 @@
                     <!-- 快速选择区域 -->
                     <div class="quick-select">
                         <div class="select-group">
+                            <div style="font-size:11px;color:var(--text-secondary);opacity:.8;">
+                                小贴士：不会写提示词也可用。选择一个工作流后，直接填写“正面提示词”，其他参数保持默认即可出图。
+                            </div>
                             <label for="workflowSelect">选择工作流：</label>
                             <select id="workflowSelect">
                                 <option value="">请选择工作流...</option>
@@ -77,6 +106,9 @@
                                 <span id="introType" class="workflow-type">类型</span>
                             </div>
                             <p id="introDescription">工作流描述</p>
+                            <div class="form-hint" style="margin-top:4px;">
+                                注：不同工作流适配不同场景，例如 Canny/Depth 需要图像作为控制条件；纯文生图只需填写提示词。
+                            </div>
                             <div class="intro-features" id="introFeatures">
                                 <!-- 功能特点 -->
                             </div>
@@ -129,150 +161,198 @@
                                 返回
                             </button>
                             <div class="header-info">
-                                <h2 id="configWorkflowName">配置参数</h2>
-                                <p id="configWorkflowType">工作流类型</p>
+                                <h3 class="workflow-title" id="configWorkflowName">配置参数</h3>
+                                <span class="workflow-type-badge" id="configWorkflowType">类型</span>
                             </div>
+                            
                         </div>
                     </div>
 
                     <div class="config-container">
-                        <div class="config-sidebar">
-                            <div class="config-nav">
-                                <button class="nav-item active" data-section="basic">
-                                    <i class="fas fa-cog"></i>
-                                    基础参数
-                                </button>
-                                <button class="nav-item" data-section="prompt">
-                                    <i class="fas fa-font"></i>
-                                    提示词
-                                </button>
-                                <button class="nav-item" data-section="image">
-                                    <i class="fas fa-image"></i>
-                                    图像输入
-                                </button>
-                                <!-- 高级设置已移除，相关配置移至模型加载器配置区域 -->
-                                <button class="nav-item" data-section="modelLoaders">
-                                    <i class="fas fa-cube"></i>
-                                    模型加载器
-                                </button>
-                                <button class="nav-item" data-section="controlnetConfigs">
-                                    <i class="fas fa-sliders-h"></i>
-                                    ControlNet
-                                </button>
+                        <!-- 第一优先级：提示词设置 -->
+                        <div class="config-section priority-high">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                <h3><i class="fas fa-font"></i> 提示词设置</h3>
+                                <a href="/prompt-manager" class="btn btn-sm btn-secondary">
+                                    <i class="fas fa-magic"></i>
+                                    提示词库
+                                </a>
+                            </div>
+                            <!-- 紧凑型图像输入（移动到提示词上方） -->
+                            <div id="imageInputsCompactSection" class="image-inputs-compact-section" style="display:none;">
+                                <div id="imageInputsCompact" class="image-inputs-compact"></div>
+                            </div>
+                            <div class="form-group">
+                                <label for="positivePrompt">正面提示词 *</label>
+                                <textarea id="positivePrompt" name="positive_prompt" rows="4" 
+                                          placeholder="描述您想要生成的图像内容..."></textarea>
+                                 <!-- 快捷提示词控制与容器 -->
+                                 <div class="prompt-tools" id="promptShortcutControls" style="margin-top:8px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                                     <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary);">
+                                         <input type="checkbox" id="promptOverwriteSwitch"> 覆盖模式
+                                     </label>
+                                     <button class="btn btn-sm btn-secondary" onclick="promptComposer.open()">
+                                         <i class="fas fa-layer-group"></i> 组合器
+                                     </button>
+                                     <button class="btn btn-sm btn-secondary" onclick="promptOptimizer.open()">
+                                         <i class="fas fa-magic"></i> 优化器
+                                     </button>
+                                     <span id="promptContextHint" style="font-size:12px; color:var(--text-secondary);">已根据工作流自动适配快捷提示词</span>
+                                 </div>
+                                 <div id="promptShortcuts" class="prompt-shortcuts" style="display:flex; flex-direction:column; gap:8px; margin-top:6px;"></div>
+                                 <div class="form-hint">示例："a portrait photo of a young woman, soft lighting, 85mm, film look"。中文或英文均可。</div>
+                            </div>
+                            <div class="form-group" id="negativePromptGroup" style="display: none;">
+                                <label for="negativePrompt">负面提示词</label>
+                                <textarea id="negativePrompt" name="negative_prompt" rows="3" 
+                                          placeholder="描述您不想要的内容..."></textarea>
+                                <div class="prompt-tools">
+                                    <button type="button" class="btn btn-sm btn-secondary" onclick="app.insertNegativeTemplate()">
+                                        <i class="fas fa-ban"></i> 标准负面
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="config-content">
-                            <!-- 基础参数 -->
-                            <div id="basicSection" class="config-section active">
-                                <h3>基础生成参数</h3>
-                                <div class="parameter-grid">
-                                    <div class="form-group">
-                                        <label for="width">图像宽度</label>
-                                        <input type="number" id="width" name="width" min="64" max="2048" step="64">
-                                        <span class="default-value">默认: <span id="defaultWidth">512</span></span>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="height">图像高度</label>
-                                        <input type="number" id="height" name="height" min="64" max="2048" step="64">
-                                        <span class="default-value">默认: <span id="defaultHeight">512</span></span>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="steps">生成步数</label>
-                                        <input type="number" id="steps" name="steps" min="1" max="100">
-                                        <span class="default-value">默认: <span id="defaultSteps">20</span></span>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="cfg">CFG Scale</label>
-                                        <input type="number" id="cfg" name="cfg" min="1" max="20" step="0.5">
-                                        <span class="default-value">默认: <span id="defaultCfg">7.0</span></span>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="seed">随机种子</label>
-                                        <input type="number" id="seed" name="seed" placeholder="-1 表示随机">
-                                        <span class="default-value">默认: <span id="defaultSeed">-1</span></span>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="sampler">采样器</label>
-                                        <select id="sampler" name="sampler">
-                                            <option value="euler">Euler</option>
-                                            <option value="euler_ancestral">Euler Ancestral</option>
-                                            <option value="dpm_2">DPM 2</option>
-                                            <option value="dpm_2_ancestral">DPM 2 Ancestral</option>
-                                            <option value="ddim">DDIM</option>
-                                        </select>
-                                        <span class="default-value">默认: <span id="defaultSampler">euler</span></span>
-                                    </div>
-                                </div>
-                            </div>
+                        <!-- 第二优先级：图像输入（已用紧凑版替代，保留结构但默认隐藏） -->
+                        <div class="config-section priority-high" id="imageInputSection" style="display:none;">
+                            <h3><i class="fas fa-image"></i> 图像输入设置</h3>
+                            <div id="imageInputs"></div>
+                            <div class="form-hint" style="margin-top:6px;">当工作流需要参考图（如 Canny/Depth/Fill）时，请在此选择输入图像；否则本区块会自动隐藏。</div>
+                        </div>
 
-                            <!-- 提示词设置 -->
-                            <div id="promptSection" class="config-section">
-                                <h3>提示词设置</h3>
+                        <!-- 第三优先级：基础参数（折叠显示） -->
+                        <div class="config-section priority-low collapsible" id="basicParametersSection">
+                            <h3 class="collapsible-header" onclick="app.toggleSection('basicParameters')">
+                                <i class="fas fa-cog"></i> 
+                                基础生成参数
+                                <i class="fas fa-chevron-down toggle-icon" id="basicParametersToggle"></i>
+                            </h3>
+                            
+                            <div class="collapsible-content" id="basicParametersContent">
+                            <div class="parameter-grid">
                                 <div class="form-group">
-                                    <label for="positivePrompt">正面提示词 *</label>
-                                    <textarea id="positivePrompt" name="positive_prompt" rows="4" 
-                                              placeholder="描述您想要生成的图像内容..."></textarea>
-                                    <div class="prompt-tools">
-                                        <button type="button" class="btn btn-sm btn-secondary" onclick="app.insertPromptTemplate('portrait')">
-                                            <i class="fas fa-user"></i> 人像
-                                        </button>
-                                        <button type="button" class="btn btn-sm btn-secondary" onclick="app.insertPromptTemplate('landscape')">
-                                            <i class="fas fa-mountain"></i> 风景
-                                        </button>
-                                        <button type="button" class="btn btn-sm btn-secondary" onclick="app.insertPromptTemplate('anime')">
-                                            <i class="fas fa-star"></i> 动漫
-                                        </button>
-                                    </div>
+                                    <label for="steps">生成步数</label>
+                                    <input type="number" id="steps" name="steps" min="1" max="100">
+                                    <span class="default-value">默认: <span id="defaultSteps">20</span></span>
+                                    <div class="form-hint">步数越高细节越多，但速度更慢。Schnell 模型可用较小步数。</div>
                                 </div>
-                                <div class="form-group" id="negativePromptGroup" style="display: none;">
-                                    <label for="negativePrompt">负面提示词</label>
-                                    <textarea id="negativePrompt" name="negative_prompt" rows="3" 
-                                              placeholder="描述您不想要的内容..."></textarea>
-                                    <div class="prompt-tools">
-                                        <button type="button" class="btn btn-sm btn-secondary" onclick="app.insertNegativeTemplate()">
-                                            <i class="fas fa-ban"></i> 标准负面
-                                        </button>
-                                    </div>
+                                <div class="form-group">
+                                    <label for="cfg">CFG Scale</label>
+                                    <input type="number" id="cfg" name="cfg" min="1" max="20" step="0.5">
+                                    <span class="default-value">默认: <span id="defaultCfg">7.0</span></span>
+                                    <div class="form-hint">数值越高越贴近提示词，但可能牺牲自然度；过低则创意更自由。</div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="seed">随机种子</label>
+                                    <input type="number" id="seed" name="seed" placeholder="-1 表示随机">
+                                    <span class="default-value">默认: <span id="defaultSeed">-1</span></span>
+                                    <div class="form-hint">固定种子可复现实验结果；-1 每次随机。</div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="sampler">采样器</label>
+                                    <select id="sampler" name="sampler">
+                                        <option value="euler">Euler</option>
+                                        <option value="euler_ancestral">Euler Ancestral</option>
+                                        <option value="heun">Heun</option>
+                                        <option value="heunpp2">Heun++</option>
+                                        <option value="dpm_2">DPM 2</option>
+                                        <option value="dpm_2_ancestral">DPM 2 Ancestral</option>
+                                        <option value="lms">LMS</option>
+                                        <option value="dpm_fast">DPM Fast</option>
+                                        <option value="dpm_adaptive">DPM Adaptive</option>
+                                        <option value="dpmpp_2s_ancestral">DPM++ 2S Ancestral</option>
+                                        <option value="dpmpp_sde">DPM++ SDE</option>
+                                        <option value="dpmpp_sde_gpu">DPM++ SDE GPU</option>
+                                        <option value="dpmpp_2m">DPM++ 2M</option>
+                                        <option value="dpmpp_2m_sde">DPM++ 2M SDE</option>
+                                        <option value="dpmpp_2m_sde_gpu">DPM++ 2M SDE GPU</option>
+                                        <option value="dpmpp_3m_sde">DPM++ 3M SDE</option>
+                                        <option value="dpmpp_3m_sde_gpu">DPM++ 3M SDE GPU</option>
+                                        <option value="ddpm">DDPM</option>
+                                        <option value="lcm">LCM</option>
+                                        <option value="ddim">DDIM</option>
+                                        <option value="uni_pc">UniPC</option>
+                                        <option value="uni_pc_bh2">UniPC BH2</option>
+                                    </select>
+                                    <span class="default-value">默认: <span id="defaultSampler">euler</span></span>
+                                    <div class="form-hint">不确定时保持默认即可。</div>
+                                </div>
+                              <div id="ksamplerParamsBlock"></div>
+                            </div>
+                            </div>
+                        </div>
+
+                        <!-- 第四优先级：节点参数（按工作流节点分组渲染） -->
+                        <div class="config-section priority-low collapsible" id="nodeParametersSection">
+                            <h3 class="collapsible-header" onclick="app.toggleSection('nodeParameters')">
+                                <i class="fas fa-sliders-h"></i> 
+                                节点参数
+                                <i class="fas fa-chevron-down toggle-icon" id="nodeParametersToggle"></i>
+                            </h3>
+                            <div class="collapsible-content" id="nodeParametersContent">
+                                <div id="resizeParamsBlock"></div>
+                                <div id="outpaintParamsBlock"></div>
+                                 <div id="genericNodeParamsBlock"></div>
+                            </div>
+                        </div>
+
+                        <!-- 输出设置区域 -->
+                        <div class="config-section priority-low collapsible" id="outputSettingsSection" style="display: none;">
+                            <h3 class="collapsible-header" onclick="app.toggleSection('outputSettings')">
+                                <i class="fas fa-image"></i> 
+                                输出设置
+                                <i class="fas fa-chevron-down toggle-icon" id="outputSettingsToggle"></i>
+                            </h3>
+                            <div class="collapsible-content" id="outputSettingsContent">
+                                <div id="outputSettings">
+                                    <!-- 输出设置将在这里动态生成 -->
                                 </div>
                             </div>
+                        </div>
 
-                            <!-- 图像输入 -->
-                            <div id="imageSection" class="config-section">
-                                <h3>图像输入设置</h3>
-                                <div id="imageInputs">
-                                    <!-- 图像输入节点将在这里动态生成 -->
-                                </div>
-                            </div>
-
-                            <!-- 高级设置已移除，相关配置移至模型加载器配置区域 -->
-
-                            <!-- 模型加载器配置 -->
-                            <div id="modelLoadersSection" class="config-section">
-                                <h3>模型加载器配置</h3>
+                        <!-- 模型加载器配置 -->
+                        <div class="config-section priority-low collapsible" id="modelLoadersSection" style="display: none;">
+                            <h3 class="collapsible-header" onclick="app.toggleSection('modelLoaders')">
+                                <i class="fas fa-cube"></i> 
+                                模型加载器配置
+                                <i class="fas fa-chevron-down toggle-icon" id="modelLoadersToggle"></i>
+                            </h3>
+                            <div class="collapsible-content" id="modelLoadersContent">
                                 <div id="modelLoaders">
                                     <!-- 模型加载器配置将在这里动态生成 -->
                                 </div>
                             </div>
+                        </div>
 
-                            <!-- ControlNet配置 -->
-                            <div id="controlnetConfigsSection" class="config-section">
-                                <h3>ControlNet配置</h3>
+                        <!-- ControlNet配置 -->
+                        <div class="config-section priority-low collapsible" id="controlnetConfigsSection" style="display: none;">
+                            <h3 class="collapsible-header" onclick="app.toggleSection('controlnetConfigs')">
+                                <i class="fas fa-sliders-h"></i> 
+                                ControlNet配置
+                                <i class="fas fa-chevron-down toggle-icon" id="controlnetConfigsToggle"></i>
+                            </h3>
+                            <div class="collapsible-content" id="controlnetConfigsContent">
                                 <div id="controlnetConfigs">
                                     <!-- ControlNet配置将在这里动态生成 -->
                                 </div>
                             </div>
                         </div>
+                        
+                        <!-- 底部空白区域，避免浮动按钮遮挡内容 -->
+                        <div class="bottom-spacer"></div>
+                        <div class="form-hint" style="text-align:center;margin-top:-100px;">
+                            温馨提示：点击右下角“播放”按钮开始生成。生成过程中会自动显示进度与当前节点。
+                        </div>
                     </div>
 
-                    <div class="config-actions">
-                        <button class="btn btn-secondary" id="resetBtn">
+                    <!-- 浮动操作按钮 -->
+                    <div class="floating-actions">
+                        <button class="btn btn-secondary floating-btn" id="resetBtn" title="重置为默认值">
                             <i class="fas fa-undo"></i>
-                            重置为默认值
                         </button>
-                        <button class="btn btn-primary" id="startGenerationBtn">
+                        <button class="btn btn-primary floating-btn" id="startGenerationBtn" title="开始生成">
                             <i class="fas fa-play"></i>
-                            开始生成
                         </button>
                     </div>
                 </div>
@@ -287,7 +367,7 @@
                             </button>
                             <div class="header-info">
                                 <h2 id="taskTitle">生成任务</h2>
-                                <p id="taskStatus">准备中...</p>
+                                <p id="taskStatusHeader">准备中...</p>
                             </div>
                         </div>
                     </div>
@@ -299,19 +379,33 @@
                             </div>
                             <span id="progressText">0%</span>
                         </div>
+                        <div class="task-details" style="margin-top: 4px;">
+                            <div class="detail-item">
+                                <span class="label">当前节点:</span>
+                                <span id="taskNodeNow" class="value">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="label">下一个:</span>
+                                <span id="taskNodeNext" class="value">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="label">状态:</span>
+                                <span id="taskStatus" class="value">准备中...</span>
+                            </div>
+                        </div>
                         
                         <div class="task-details">
                             <div class="detail-item">
                                 <span class="label">工作流:</span>
-                                <span id="taskWorkflowName">-</span>
+                                <span id="taskWorkflowName" class="value">-</span>
                             </div>
                             <div class="detail-item">
                                 <span class="label">开始时间:</span>
-                                <span id="taskStartTime">-</span>
+                                <span id="taskStartTime" class="value">-</span>
                             </div>
                             <div class="detail-item">
                                 <span class="label">预计剩余:</span>
-                                <span id="taskRemaining">-</span>
+                                <span id="taskRemaining" class="value">-</span>
                             </div>
                         </div>
                     </div>
@@ -327,8 +421,8 @@
                     </div>
 
                     <div id="taskError" class="task-error" style="display: none;">
-                        <h3>生成失败</h3>
-                        <div id="errorContent" class="error-content">
+                        <h3>任务执行失败</h3>
+                        <div class="error-content">
                             <!-- 错误信息将在这里显示 -->
                         </div>
                     </div>
@@ -341,16 +435,46 @@
             <div class="modal-content image-select-modal">
                 <div class="modal-header">
                     <h3>选择图像</h3>
-                    <button class="btn btn-sm btn-secondary" onclick="app.hideImageSelectModal()">
-                        <i class="fas fa-times"></i>
-                    </button>
+                    <div class="modal-header-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="app.loadImages(true)" title="刷新图片列表">
+                            <i class="fas fa-redo"></i>
+                        </button>
+                        <button class="btn btn-sm btn-secondary" onclick="app.hideImageSelectModal()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
                 </div>
                 
                 <div class="modal-body">
-                    <div class="image-tabs">
-                        <button class="tab-btn active" data-tab="uploaded">已上传</button>
-                        <button class="tab-btn" data-tab="generated">已生成</button>
-                        <button class="tab-btn" data-tab="upload">上传新图像</button>
+                            <div class="image-tabs">
+                        <button class="tab-btn active" data-tab="uploaded">
+                            <i class="fas fa-folder"></i>
+                            <span>已上传</span>
+                        </button>
+                        <button class="tab-btn" data-tab="generated">
+                            <i class="fas fa-magic"></i>
+                            <span>已生成</span>
+                        </button>
+                        <button class="tab-btn" data-tab="upload">
+                            <i class="fas fa-plus"></i>
+                            <span>上传新图像</span>
+                        </button>
+                                <button class="tab-btn" data-tab="mask">
+                                    <i class="fas fa-paint-brush"></i>
+                                    <span>涂抹遮罩</span>
+                                </button>
+                    </div>
+                    
+                    <!-- 搜索栏 -->
+                    <div class="image-search" id="imageSearchBar" style="display: none;">
+                        <div class="search-input-wrapper">
+                            <i class="fas fa-search"></i>
+                            <input type="text" id="imageSearchInput" placeholder="搜索图片名称..." 
+                                   oninput="app.searchImages(this.value)">
+                            <button class="clear-search" onclick="app.clearImageSearch()" style="display: none;">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
                     </div>
                     
                     <div id="uploadedImages" class="image-grid active">
@@ -366,16 +490,108 @@
                             <i class="fas fa-cloud-upload-alt"></i>
                             <p>拖拽图像到此处或点击选择</p>
                             <input type="file" id="imageUploadInput" accept="image/*" multiple>
-                            <button class="btn btn-primary" onclick="document.getElementById('imageUploadInput').click()">
+                            <button class="btn btn-primary upload-btn" onclick="document.getElementById('imageUploadInput').click()">
+                                <i class="fas fa-plus"></i>
                                 选择图像
                             </button>
                         </div>
+                        <div class="upload-tips">
+                            <h4><i class="fas fa-lightbulb"></i> 上传提示</h4>
+                            <ul>
+                                <li>支持 PNG、JPG、JPEG、WebP 格式</li>
+                                <li>可同时上传多个文件</li>
+                                <li>支持拖拽上传</li>
+                                <li>建议图片大小不超过 10MB</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- 简易涂抹遮罩编辑器（画布） -->
+                    <div id="maskEditor" class="image-grid" style="display:none;">
+                        <div style="display:flex; gap:12px; width:100%;">
+                            <div style="flex:1; background:var(--card-bg); border:1px solid var(--border-color); border-radius:8px; padding:12px;">
+                                <canvas id="maskCanvas" style="width:100%; max-height:60vh; background:#111; border-radius:6px;"></canvas>
+                            </div>
+                            <div style="width:280px; display:flex; flex-direction:column; gap:8px;">
+                                <div class="form-group">
+                                    <label>画笔大小</label>
+                                    <input type="range" id="brushSize" min="5" max="120" value="40">
+                                    <span class="default-value">默认: 40</span>
+                                </div>
+                                <div class="form-group">
+                                    <label>模式</label>
+                                    <select id="brushMode">
+                                        <option value="paint">涂抹（需要修复）</option>
+                                        <option value="erase">橡皮</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <button class="btn btn-secondary" onclick="app.clearMaskCanvas()">清空</button>
+                                </div>
+                                <div class="form-group">
+                                    <button class="btn btn-primary" onclick="app.saveMaskFromCanvas()">保存遮罩</button>
+                                </div>
+                                <div class="form-hint">说明：白色代表“需要修复/填充”的区域；点击“保存遮罩”后，会将 PNG 保存到 ComfyUI/input，并自动链接到工作流。</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 遮罩编辑器（用于 Fill/Inpaint 工作流） -->
+        <div id="maskEditorModal" class="modal" style="display:none;">
+            <div class="modal-content" style="max-width: 92vw; max-height: 92vh;">
+                <div class="modal-header">
+                    <h3>编辑遮罩</h3>
+                    <div class="modal-header-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="app.resetMaskEditor()">重置</button>
+                        <button class="btn btn-sm btn-secondary" onclick="app.closeMaskEditor()"><i class="fas fa-times"></i></button>
+                    </div>
+                </div>
+                <div class="modal-body" style="display:flex; gap:12px; align-items:flex-start;">
+                    <div style="flex:1; overflow:auto;">
+                        <div id="maskEditorStage" style="position:relative; display:inline-block;">
+                            <img id="maskBaseImage" src="" alt="base" style="max-width:100%; display:block;">
+                            <canvas id="maskDrawCanvas" style="position:absolute; left:0; top:0;"></canvas>
+                        </div>
+                    </div>
+                    <div style="width:260px; flex:0 0 260px; display:flex; flex-direction:column; gap:10px;">
+                        <div class="form-group">
+                            <label>工具</label>
+                            <div style="display:flex; gap:8px;">
+                                <button id="toolBrush" class="btn btn-sm btn-secondary" onclick="app.setMaskTool('brush')">画笔</button>
+                                <button id="toolEraser" class="btn btn-sm btn-secondary" onclick="app.setMaskTool('eraser')">橡皮</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="maskBrushSize">画笔大小</label>
+                            <input type="range" id="maskBrushSize" min="4" max="128" value="48" oninput="app.updateMaskBrushSize(this.value)">
+                            <div class="form-hint">当前: <span id="maskBrushSizeVal">48</span> px</div>
+                        </div>
+                        <div class="form-group">
+                            <label for="maskFeather">羽化半径</label>
+                            <input type="range" id="maskFeather" min="0" max="64" value="24">
+                            <div class="form-hint">保存时应用到遮罩边缘</div>
+                        </div>
+                        <div class="form-group">
+                            <label><input type="checkbox" id="maskInvert"> 反向遮罩</label>
+                            <div class="form-hint">勾选后“画到的区域保留”，未画区域填充</div>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <button class="btn btn-primary" onclick="app.saveMask()"><i class="fas fa-save"></i> 保存并替换图像</button>
+                            <button class="btn btn-secondary" onclick="app.closeMaskEditor()">取消</button>
+                        </div>
+                        <div class="form-hint">说明：遮罩区域表示需要“填充/修改”的区域。保存后会生成带 Alpha 的 PNG 并作为输入图像。</div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="/static/js/app.js"></script>
+    <script src="/static/js/prompt-shortcuts.js?v={{ cache_bust }}"></script>
+    <script src="/static/js/prompt-composer.js?v={{ cache_bust }}"></script>
+    <script src="/static/js/prompt-optimizer.js?v={{ cache_bust }}"></script>
+    <script src="/static/js/app.js?v={{ cache_bust }}"></script>
 </body>
 </html>

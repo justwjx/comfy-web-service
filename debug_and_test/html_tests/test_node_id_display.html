@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>节点ID显示测试</title>
+    <link rel="stylesheet" href="../static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .test-container {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin-bottom: 40px;
+        }
+        .test-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: var(--text-primary);
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1 class="test-title">图像输入节点ID显示测试</h1>
+        
+        <!-- 测试单个图像输入节点 -->
+        <div class="test-section">
+            <h2 class="test-title">单个图像输入节点（不应显示节点ID）</h2>
+            <div id="singleImageInput">
+                <!-- 单个图像输入节点将在这里生成 -->
+            </div>
+        </div>
+        
+        <!-- 测试多个图像输入节点 -->
+        <div class="test-section">
+            <h2 class="test-title">多个图像输入节点（应显示节点ID）</h2>
+            <div id="multipleImageInputs">
+                <!-- 多个图像输入节点将在这里生成 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 模拟图像输入数据
+        const singleImageInput = [
+            {
+                node_id: "node_1",
+                name: "输入图像",
+                type: "image",
+                required: true,
+                description: "这是单个图像输入节点的描述"
+            }
+        ];
+
+        const multipleImageInputs = [
+            {
+                node_id: "node_1",
+                name: "主图像输入",
+                type: "image",
+                required: true,
+                description: "这是第一个图像输入节点的描述"
+            },
+            {
+                node_id: "node_2",
+                name: "参考图像",
+                type: "image",
+                required: false,
+                description: "这是第二个图像输入节点的描述"
+            },
+            {
+                node_id: "node_3",
+                name: "蒙版图像",
+                type: "image",
+                required: true,
+                description: "这是第三个图像输入节点的描述"
+            }
+        ];
+
+        // 生成图像输入节点的函数（从app.js复制）
+        function generateImageInputs(imageInputs, containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            
+            if (!imageInputs || imageInputs.length === 0) {
+                container.innerHTML = `
+                    <div class="no-image-inputs">
+                        <i class="fas fa-info-circle"></i>
+                        <p>此工作流不需要图像输入</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // 检查是否有多个图像输入节点
+            const showNodeIds = imageInputs.length > 1;
+            
+            container.innerHTML = imageInputs.map(input => `
+                <div class="image-input-group">
+                    <div class="input-header">
+                        <h4>${input.name}</h4>
+                        ${showNodeIds ? `<span class="node-id-badge">节点ID: ${input.node_id}</span>` : ''}
+                        <span class="input-type">${input.type}</span>
+                        ${input.required ? '<span class="required-badge">必需</span>' : '<span class="optional-badge">可选</span>'}
+                    </div>
+                    <p class="input-description">${input.description}</p>
+                    <div class="image-selector">
+                        <button type="button" class="btn btn-secondary">
+                            <i class="fas fa-image"></i>
+                            选择图像
+                        </button>
+                        <div class="selected-image" id="selected-${input.node_id}" style="display: none;">
+                            <img src="" alt="已选择的图像" id="preview-${input.node_id}">
+                            <button type="button" class="btn btn-sm btn-secondary">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 页面加载时生成测试内容
+        document.addEventListener('DOMContentLoaded', function() {
+            generateImageInputs(singleImageInput, 'singleImageInput');
+            generateImageInputs(multipleImageInputs, 'multipleImageInputs');
+        });
+    </script>
+</body>
+</html> 

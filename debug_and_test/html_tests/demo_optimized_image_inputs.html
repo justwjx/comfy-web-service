@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>优化后的图像输入节点显示效果</title>
+    <link rel="stylesheet" href="../static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .demo-container {
+            max-width: 1200px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .demo-title {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 30px;
+            color: var(--text-primary);
+            text-align: center;
+        }
+        .optimization-summary {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            padding: 30px;
+            margin-bottom: 40px;
+            box-shadow: var(--shadow);
+        }
+        .summary-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: var(--text-primary);
+        }
+        .summary-list {
+            list-style: none;
+            padding: 0;
+        }
+        .summary-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .summary-list li:last-child {
+            border-bottom: none;
+        }
+        .summary-list i {
+            color: var(--success-color);
+            font-size: 18px;
+        }
+        .demo-section {
+            margin-bottom: 40px;
+        }
+        .section-title {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: var(--text-primary);
+        }
+        .connection-info {
+            background: var(--bg-color);
+            border-radius: var(--border-radius);
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        .connection-diagram {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        .node-box {
+            background: var(--card-bg);
+            border: 2px solid var(--primary-color);
+            border-radius: var(--border-radius);
+            padding: 15px;
+            text-align: center;
+            min-width: 120px;
+        }
+        .node-box.main {
+            border-color: var(--success-color);
+            background: rgba(16, 185, 129, 0.1);
+        }
+        .node-box.reference {
+            border-color: var(--secondary-color);
+            background: rgba(100, 116, 139, 0.1);
+        }
+        .node-id {
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 5px;
+        }
+        .node-type {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        .arrow {
+            font-size: 24px;
+            color: var(--primary-color);
+        }
+        .stitch-node {
+            background: var(--primary-color);
+            color: white;
+            border-radius: var(--border-radius);
+            padding: 15px;
+            text-align: center;
+            min-width: 120px;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <h1 class="demo-title">🎯 图像输入节点优化效果展示</h1>
+        
+        <div class="optimization-summary">
+            <h2 class="summary-title">✅ 优化成果</h2>
+            <ul class="summary-list">
+                <li><i class="fas fa-check-circle"></i> <strong>智能必选性判断：</strong>基于ImageStitch节点连接关系，正确识别主图像输入和参考图像输入</li>
+                <li><i class="fas fa-check-circle"></i> <strong>节点ID显示：</strong>多个图像输入节点时自动显示节点ID，便于用户区分</li>
+                <li><i class="fas fa-check-circle"></i> <strong>清晰的命名：</strong>主图像输入 vs 参考图像输入，语义更明确</li>
+                <li><i class="fas fa-check-circle"></i> <strong>用户友好：</strong>必选节点标记为必需，可选节点标记为可选</li>
+            </ul>
+        </div>
+        
+        <div class="demo-section">
+            <h2 class="section-title">🔗 工作流连接关系分析</h2>
+            <div class="connection-info">
+                <h3>Kontext工作流 (nunchaku-flux.1-kontext-dev.json)</h3>
+                <p>通过分析ImageStitch节点的连接关系，正确识别了图像输入节点的角色：</p>
+                
+                <div class="connection-diagram">
+                    <div class="node-box main">
+                        <div class="node-id">节点142</div>
+                        <div class="node-type">LoadImageOutput</div>
+                        <div class="node-type">主图像输入</div>
+                    </div>
+                    <div class="arrow">→</div>
+                    <div class="stitch-node">
+                        <div>ImageStitch</div>
+                        <div>节点146</div>
+                        <div style="font-size: 12px;">image1输入</div>
+                    </div>
+                </div>
+                
+                <div class="connection-diagram">
+                    <div class="node-box reference">
+                        <div class="node-id">节点147</div>
+                        <div class="node-type">LoadImageOutput</div>
+                        <div class="node-type">参考图像输入</div>
+                    </div>
+                    <div class="arrow">→</div>
+                    <div class="stitch-node">
+                        <div>ImageStitch</div>
+                        <div>节点146</div>
+                        <div style="font-size: 12px;">image2输入</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="demo-section">
+            <h2 class="section-title">🎨 优化后的Web界面效果</h2>
+            <div id="optimizedImageInputs">
+                <!-- 优化后的图像输入节点将在这里生成 -->
+            </div>
+        </div>
+        
+        <div class="demo-section">
+            <h2 class="section-title">📊 技术实现细节</h2>
+            <div class="connection-info">
+                <h3>智能判断逻辑</h3>
+                <ol>
+                    <li><strong>查找ImageStitch节点：</strong>在工作流中定位ImageStitch节点</li>
+                    <li><strong>分析连接关系：</strong>检查LoadImageOutput节点连接到ImageStitch的哪个输入</li>
+                    <li><strong>确定角色：</strong>连接到image1的为主图像输入（必需），连接到image2的为参考图像输入（可选）</li>
+                    <li><strong>备选判断：</strong>如果无法确定连接关系，使用order字段作为备选判断依据</li>
+                </ol>
+                
+                <h3>节点ID显示逻辑</h3>
+                <ul>
+                    <li><strong>条件显示：</strong>只有当存在多个图像输入节点时才显示节点ID</li>
+                    <li><strong>样式设计：</strong>使用较小的字体和特殊样式，不干扰主要信息</li>
+                    <li><strong>响应式：</strong>在不同屏幕尺寸下都能良好显示</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 模拟优化后的图像输入数据
+        const optimizedImageInputs = [
+            {
+                node_id: "142",
+                name: "主图像输入",
+                type: "image",
+                required: true,
+                description: "选择主要处理的图像 (必需)"
+            },
+            {
+                node_id: "147",
+                name: "参考图像输入",
+                type: "image",
+                required: false,
+                description: "选择参考图像 (可选)"
+            }
+        ];
+
+        // 生成优化后的图像输入节点
+        function generateOptimizedImageInputs(imageInputs, containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            
+            // 检查是否有多个图像输入节点
+            const showNodeIds = imageInputs.length > 1;
+            
+            container.innerHTML = imageInputs.map(input => `
+                <div class="image-input-group">
+                    <div class="input-header">
+                        <h4>${input.name}</h4>
+                        ${showNodeIds ? `<span class="node-id-badge">节点ID: ${input.node_id}</span>` : ''}
+                        <span class="input-type">${input.type}</span>
+                        ${input.required ? '<span class="required-badge">必需</span>' : '<span class="optional-badge">可选</span>'}
+                    </div>
+                    <p class="input-description">${input.description}</p>
+                    <div class="image-selector">
+                        <button type="button" class="btn btn-secondary">
+                            <i class="fas fa-image"></i>
+                            选择图像
+                        </button>
+                        <div class="selected-image" id="selected-${input.node_id}" style="display: none;">
+                            <img src="" alt="已选择的图像" id="preview-${input.node_id}">
+                            <button type="button" class="btn btn-sm btn-secondary">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 页面加载时生成演示内容
+        document.addEventListener('DOMContentLoaded', function() {
+            generateOptimizedImageInputs(optimizedImageInputs, 'optimizedImageInputs');
+        });
+    </script>
+</body>
+</html> 

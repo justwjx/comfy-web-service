@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>主页调试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .loading { background: #d1ecf1; color: #0c5460; }
+        .log { background: #f8f9fa; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto; }
+        .loading-state { text-align: center; padding: 40px; }
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <h1>主页调试 - 模拟主页加载过程</h1>
+    
+    <!-- 模拟主页的加载状态 -->
+    <div id="loadingState" class="loading-state">
+        <div class="spinner"></div>
+        <p>正在加载工作流...</p>
+    </div>
+    
+    <div id="status" class="status loading">正在初始化...</div>
+    
+    <div id="results"></div>
+    
+    <div id="console-log" class="log"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const status = document.getElementById('status');
+            const results = document.getElementById('results');
+            const consoleLog = document.getElementById('console-log');
+            
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+            logEntry.className = `status ${type}`;
+            
+            results.appendChild(logEntry);
+            status.textContent = message;
+            status.className = `status ${type}`;
+            
+            // 添加到控制台日志
+            const consoleEntry = document.createElement('div');
+            consoleEntry.textContent = `[${timestamp}] ${message}`;
+            consoleLog.appendChild(consoleEntry);
+            consoleLog.scrollTop = consoleLog.scrollHeight;
+            
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        // 捕获JavaScript错误
+        window.addEventListener('error', function(e) {
+            log(`JavaScript错误: ${e.message} (${e.filename}:${e.lineno})`, 'error');
+        });
+
+        // 捕获未处理的Promise拒绝
+        window.addEventListener('unhandledrejection', function(e) {
+            log(`未处理的Promise拒绝: ${e.reason}`, 'error');
+        });
+
+        // 模拟主页的JavaScript加载过程
+        async function simulateMainPageLoading() {
+            try {
+                log('开始模拟主页加载过程...', 'loading');
+                
+                // 1. 加载prompt-shortcuts.js
+                log('步骤1: 加载 prompt-shortcuts.js...', 'loading');
+                const shortcutsScript = document.createElement('script');
+                shortcutsScript.src = '/static/js/prompt-shortcuts.js';
+                shortcutsScript.onload = () => log('✓ prompt-shortcuts.js 加载成功', 'success');
+                shortcutsScript.onerror = () => log('✗ prompt-shortcuts.js 加载失败', 'error');
+                document.head.appendChild(shortcutsScript);
+                
+                // 等待第一个脚本加载
+                await new Promise((resolve) => {
+                    shortcutsScript.onload = resolve;
+                    shortcutsScript.onerror = resolve;
+                });
+                
+                // 2. 加载prompt-templates.js
+                log('步骤2: 加载 prompt-templates.js...', 'loading');
+                const templatesScript = document.createElement('script');
+                templatesScript.src = '/static/js/prompt-templates.js';
+                templatesScript.onload = () => log('✓ prompt-templates.js 加载成功', 'success');
+                templatesScript.onerror = () => log('✗ prompt-templates.js 加载失败', 'error');
+                document.head.appendChild(templatesScript);
+                
+                // 等待第二个脚本加载
+                await new Promise((resolve) => {
+                    templatesScript.onload = resolve;
+                    templatesScript.onerror = resolve;
+                });
+                
+                // 3. 加载app.js
+                log('步骤3: 加载 app.js...', 'loading');
+                const appScript = document.createElement('script');
+                appScript.src = '/static/js/app.js';
+                appScript.onload = () => log('✓ app.js 加载成功', 'success');
+                appScript.onerror = () => log('✗ app.js 加载失败', 'error');
+                document.head.appendChild(appScript);
+                
+                // 等待第三个脚本加载
+                await new Promise((resolve) => {
+                    appScript.onload = resolve;
+                    appScript.onerror = resolve;
+                });
+                
+                // 4. 检查类是否正确定义
+                log('步骤4: 检查类定义...', 'loading');
+                setTimeout(() => {
+                    if (typeof PromptShortcutSystem !== 'undefined') {
+                        log('✓ PromptShortcutSystem 类已定义', 'success');
+                    } else {
+                        log('✗ PromptShortcutSystem 类未定义', 'error');
+                    }
+                    
+                    if (typeof PromptTemplates !== 'undefined') {
+                        log('✓ PromptTemplates 类已定义', 'success');
+                    } else {
+                        log('✗ PromptTemplates 类未定义', 'error');
+                    }
+                    
+                    if (typeof ComfyWebApp !== 'undefined') {
+                        log('✓ ComfyWebApp 类已定义', 'success');
+                    } else {
+                        log('✗ ComfyWebApp 类未定义', 'error');
+                    }
+                    
+                    // 5. 尝试初始化应用
+                    log('步骤5: 尝试初始化应用...', 'loading');
+                    try {
+                        if (typeof ComfyWebApp !== 'undefined') {
+                            const testApp = new ComfyWebApp();
+                            log('✓ 应用初始化成功', 'success');
+                        } else {
+                            log('✗ 无法初始化应用：ComfyWebApp 未定义', 'error');
+                        }
+                    } catch (error) {
+                        log(`✗ 应用初始化失败: ${error.message}`, 'error');
+                    }
+                    
+                    log('主页加载过程模拟完成', 'success');
+                }, 1000);
+                
+            } catch (error) {
+                log(`模拟过程失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 页面加载完成后开始模拟
+        window.addEventListener('load', () => {
+            log('页面加载完成，开始模拟主页加载过程...', 'loading');
+            setTimeout(simulateMainPageLoading, 1000);
+        });
+    </script>
+</body>
+</html>
+

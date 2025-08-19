@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工作流加载调试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .loading { background: #d1ecf1; color: #0c5460; }
+        button { padding: 10px 20px; margin: 5px; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 5px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>工作流加载调试</h1>
+    
+    <div id="status" class="status loading">正在初始化...</div>
+    
+    <button onclick="testWorkflowAPI()">测试工作流API</button>
+    <button onclick="testComfyUIStatus()">测试ComfyUI状态</button>
+    <button onclick="testFullLoad()">测试完整加载流程</button>
+    
+    <div id="results"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const status = document.getElementById('status');
+            const results = document.getElementById('results');
+            
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+            logEntry.className = `status ${type}`;
+            
+            results.appendChild(logEntry);
+            status.textContent = message;
+            status.className = `status ${type}`;
+            
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        async function testWorkflowAPI() {
+            try {
+                log('开始测试工作流API...', 'loading');
+                
+                const response = await fetch('/api/workflows');
+                log(`API响应状态: ${response.status}`, response.ok ? 'success' : 'error');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                log(`API响应成功，工作流数量: ${data.workflows?.length || 0}`, 'success');
+                
+                const resultsDiv = document.getElementById('results');
+                const pre = document.createElement('pre');
+                pre.textContent = JSON.stringify(data, null, 2);
+                resultsDiv.appendChild(pre);
+                
+            } catch (error) {
+                log(`API测试失败: ${error.message}`, 'error');
+                console.error('API测试错误:', error);
+            }
+        }
+
+        async function testComfyUIStatus() {
+            try {
+                log('开始测试ComfyUI状态...', 'loading');
+                
+                const response = await fetch('/api/comfyui/status');
+                log(`状态API响应: ${response.status}`, response.ok ? 'success' : 'error');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                log(`ComfyUI状态: ${data.connected ? '已连接' : '未连接'}`, data.connected ? 'success' : 'error');
+                
+            } catch (error) {
+                log(`状态测试失败: ${error.message}`, 'error');
+                console.error('状态测试错误:', error);
+            }
+        }
+
+        async function testFullLoad() {
+            try {
+                log('开始测试完整加载流程...', 'loading');
+                
+                // 并行调用两个API
+                const [workflowResponse, statusResponse] = await Promise.all([
+                    fetch('/api/workflows'),
+                    fetch('/api/comfyui/status')
+                ]);
+                
+                log('并行API调用完成', 'success');
+                
+                // 检查工作流响应
+                if (!workflowResponse.ok) {
+                    throw new Error(`工作流API失败: ${workflowResponse.status}`);
+                }
+                
+                const workflowData = await workflowResponse.json();
+                log(`工作流加载成功: ${workflowData.workflows?.length || 0} 个工作流`, 'success');
+                
+                // 检查状态响应
+                if (!statusResponse.ok) {
+                    throw new Error(`状态API失败: ${statusResponse.status}`);
+                }
+                
+                const statusData = await statusResponse.json();
+                log(`ComfyUI状态检查完成: ${statusData.connected ? '已连接' : '未连接'}`, 'success');
+                
+                log('完整加载流程测试成功！', 'success');
+                
+            } catch (error) {
+                log(`完整加载测试失败: ${error.message}`, 'error');
+                console.error('完整加载测试错误:', error);
+            }
+        }
+
+        // 页面加载时自动测试
+        window.addEventListener('load', () => {
+            log('页面加载完成，开始自动测试...', 'loading');
+            setTimeout(testFullLoad, 1000);
+        });
+    </script>
+</body>
+</html>

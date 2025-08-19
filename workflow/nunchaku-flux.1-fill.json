@@ -833,7 +833,7 @@
         "Node name for S&R": "NunchakuFluxDiTLoader"
       },
       "widgets_values": [
-        "svdq-int4-flux.1-fill-dev",
+        "svdq-int4_r32-flux.1-fill-dev.safetensors",
         0,
         "nunchaku-fp16",
         "auto",
@@ -957,20 +957,20 @@
       "MASK"
     ],
     [
-      107,
-      58,
-      0,
-      38,
-      3,
-      "IMAGE"
-    ],
-    [
       108,
       58,
       1,
       38,
       4,
       "MASK"
+    ],
+    [
+      107,
+      58,
+      0,
+      38,
+      3,
+      "IMAGE"
     ],
     [
       109,

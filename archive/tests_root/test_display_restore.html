@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>显示逻辑恢复测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        #log { background: #f8f9fa; padding: 10px; border-radius: 5px; font-family: monospace; max-height: 400px; overflow-y: auto; }
+        .collapsible-header { cursor: pointer; padding: 10px; background: #f8f9fa; border: 1px solid #ddd; margin: 5px 0; }
+        .collapsible-content { padding: 10px; border: 1px solid #ddd; margin: 5px 0; }
+        .collapsible.expanded .collapsible-content { display: block; }
+        .collapsible:not(.expanded) .collapsible-content { display: none; }
+        .toggle-icon { float: right; transition: transform 0.3s; }
+        .collapsible.expanded .toggle-icon { transform: rotate(180deg); }
+        .form-group { margin: 10px 0; }
+        .form-group label { display: block; font-weight: bold; }
+        .form-group input, .form-group select { width: 100%; padding: 5px; }
+        .default-value { color: #666; font-size: 0.9em; }
+        .form-hint { color: #888; font-size: 0.8em; margin-top: 5px; }
+        .model-loader-group { border: 1px solid #ddd; margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .loader-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .loader-type { color: #666; font-size: 0.9em; }
+        .node-id-badge { background: #007bff; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; }
+    </style>
+</head>
+<body>
+    <h1>显示逻辑恢复测试</h1>
+    
+    <div class="test-section info">
+        <h3>测试说明</h3>
+        <p>此页面模拟了恢复后的显示逻辑，包括：</p>
+        <ul>
+            <li>✅ 基础参数区域默认展开</li>
+            <li>✅ 节点参数分组显示（Resize、Outpaint、KSampler）</li>
+            <li>✅ 通用节点参数优先级排序和过滤</li>
+            <li>✅ 模型加载器分组显示</li>
+            <li>✅ ControlNet配置分组显示</li>
+            <li>✅ 输出设置分组显示</li>
+        </ul>
+    </div>
+    
+    <div class="test-section">
+        <h3>模拟工作流配置页面</h3>
+        <div id="configPage">
+            <!-- 基础参数区域 -->
+            <div class="collapsible expanded" id="basicParametersSection">
+                <div class="collapsible-header" onclick="toggleSection('basicParameters')">
+                    <i class="fas fa-cog"></i> 基础生成参数
+                    <i class="toggle-icon" id="basicParametersToggle">▼</i>
+                </div>
+                <div class="collapsible-content" id="basicParametersContent">
+                    <div class="form-group">
+                        <label for="steps">生成步数</label>
+                        <input type="number" id="steps" name="steps" min="1" max="100" value="20">
+                        <span class="default-value">默认: 20</span>
+                        <div class="form-hint">步数越高细节越多，但速度更慢。Schnell 模型可用较小步数。</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="cfg">CFG Scale</label>
+                        <input type="number" id="cfg" name="cfg" min="1" max="20" step="0.5" value="7.0">
+                        <span class="default-value">默认: 7.0</span>
+                        <div class="form-hint">数值越高越贴近提示词，但可能牺牲自然度；过低则创意更自由。</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Scheduler</label>
+                        <select id="scheduler" name="scheduler">
+                            <option value="normal" selected>normal</option>
+                            <option value="karras">karras</option>
+                            <option value="exponential">exponential</option>
+                            <option value="simple">simple</option>
+                        </select>
+                        <span class="default-value">默认: normal</span>
+                        <div class="form-hint">采样调度器影响噪声分布与收敛速度；Redux Dev 默认 simple，其他默认 normal。</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Denoise</label>
+                        <input type="number" id="denoise" name="denoise" min="0" max="1" step="0.01" value="1.0">
+                        <span class="default-value">默认: 1.0</span>
+                        <div class="form-hint">去噪强度；越小保留初始条件（图生图/控制）越多，1 表示完全从噪声采样。</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 节点参数区域 -->
+            <div class="collapsible" id="nodeParametersSection">
+                <div class="collapsible-header" onclick="toggleSection('nodeParameters')">
+                    <i class="fas fa-sliders-h"></i> 节点参数
+                    <i class="toggle-icon" id="nodeParametersToggle">▼</i>
+                </div>
+                <div class="collapsible-content" id="nodeParametersContent">
+                    <div id="resizeParamsBlock">
+                        <div class="model-loader-group">
+                            <div class="loader-header">
+                                <h4>图像尺寸调整</h4>
+                                <span class="loader-type">ImageAndMaskResizeNode</span>
+                            </div>
+                            <div class="loader-parameters">
+                                <div class="form-group">
+                                    <label for="resize_width">调整宽度</label>
+                                    <input type="number" id="resize_width" value="512">
+                                    <span class="default-value">默认: 512</span>
+                                </div>
+                                <div class="form-group">
+                                    <label for="resize_height">调整高度</label>
+                                    <input type="number" id="resize_height" value="512">
+                                    <span class="default-value">默认: 512</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="genericNodeParamsBlock">
+                        <div class="model-loader-group">
+                            <div class="loader-header">
+                                <h4>文本编码器</h4>
+                                <span class="loader-type">CLIPTextEncode</span>
+                            </div>
+                            <div class="loader-parameters">
+                                <div class="form-group">
+                                    <label for="text_encode">文本内容</label>
+                                    <input type="text" id="text_encode" value="a beautiful landscape">
+                                    <span class="default-value">默认: a beautiful landscape</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="model-loader-group">
+                            <div class="loader-header">
+                                <h4>潜在空间生成</h4>
+                                <span class="loader-type">EmptyLatentImage</span>
+                            </div>
+                            <div class="loader-parameters">
+                                <div class="form-group">
+                                    <label for="latent_width">潜在宽度</label>
+                                    <input type="number" id="latent_width" value="64">
+                                    <span class="default-value">默认: 64</span>
+                                </div>
+                                <div class="form-group">
+                                    <label for="latent_height">潜在高度</label>
+                                    <input type="number" id="latent_height" value="64">
+                                    <span class="default-value">默认: 64</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 模型加载器区域 -->
+            <div class="collapsible" id="modelLoadersSection">
+                <div class="collapsible-header" onclick="toggleSection('modelLoaders')">
+                    <i class="fas fa-cube"></i> 模型加载器配置
+                    <i class="toggle-icon" id="modelLoadersToggle">▼</i>
+                </div>
+                <div class="collapsible-content" id="modelLoadersContent">
+                    <div id="modelLoaders">
+                        <div class="model-loader-group">
+                            <div class="loader-header">
+                                <h4>主模型加载器</h4>
+                                <span class="loader-type">CheckpointLoaderSimple</span>
+                            </div>
+                            <div class="loader-parameters">
+                                <div class="form-group">
+                                    <label for="model_path">模型路径</label>
+                                    <input type="text" id="model_path" value="model.safetensors">
+                                    <span class="default-value">默认: model.safetensors</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="model-loader-group">
+                            <div class="loader-header">
+                                <h4>VAE加载器</h4>
+                                <span class="loader-type">VAELoader</span>
+                            </div>
+                            <div class="loader-parameters">
+                                <div class="form-group">
+                                    <label for="vae_name">VAE名称</label>
+                                    <input type="text" id="vae_name" value="vae.safetensors">
+                                    <span class="default-value">默认: vae.safetensors</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ControlNet配置区域 -->
+            <div class="collapsible" id="controlnetConfigsSection">
+                <div class="collapsible-header" onclick="toggleSection('controlnetConfigs')">
+                    <i class="fas fa-network-wired"></i> ControlNet配置
+                    <i class="toggle-icon" id="controlnetConfigsToggle">▼</i>
+                </div>
+                <div class="collapsible-content" id="controlnetConfigsContent">
+                    <div id="controlnetConfigs">
+                        <div class="model-loader-group">
+                            <div class="loader-header">
+                                <h4>ControlNet 1</h4>
+                                <span class="loader-type">ControlNetLoader</span>
+                            </div>
+                            <div class="loader-parameters">
+                                <div class="form-group">
+                                    <label for="controlnet_model">ControlNet模型</label>
+                                    <input type="text" id="controlnet_model" value="controlnet.safetensors">
+                                    <span class="default-value">默认: controlnet.safetensors</span>
+                                </div>
+                                <div class="form-group">
+                                    <label for="controlnet_strength">强度</label>
+                                    <input type="number" id="controlnet_strength" min="0" max="2" step="0.1" value="1.0">
+                                    <span class="default-value">默认: 1.0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h3>测试控制</h3>
+        <button onclick="testAllSections()">测试所有区域</button>
+        <button onclick="checkDisplayLogic()">检查显示逻辑</button>
+        <button onclick="clearLog()">清空日志</button>
+    </div>
+    
+    <div class="test-section">
+        <h3>测试日志</h3>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function toggleSection(sectionId) {
+            try {
+                log(`切换区域: ${sectionId}`);
+                
+                const section = document.getElementById(sectionId + 'Section');
+                const toggle = document.getElementById(sectionId + 'Toggle');
+                
+                if (!section || !toggle) {
+                    log(`错误: 找不到元素 ${sectionId}Section 或 ${sectionId}Toggle`);
+                    return;
+                }
+                
+                const isExpanded = section.classList.contains('expanded');
+                log(`当前状态: ${isExpanded ? '展开' : '折叠'}`);
+                
+                if (isExpanded) {
+                    section.classList.remove('expanded');
+                    toggle.style.transform = 'rotate(0deg)';
+                    log(`切换完成，新状态: 折叠`);
+                } else {
+                    section.classList.add('expanded');
+                    toggle.style.transform = 'rotate(180deg)';
+                    log(`切换完成，新状态: 展开`);
+                }
+                
+            } catch (error) {
+                log(`切换失败: ${error.message}`);
+            }
+        }
+
+        function testAllSections() {
+            log('开始测试所有区域...');
+            
+            const sections = ['basicParameters', 'nodeParameters', 'modelLoaders', 'controlnetConfigs'];
+            
+            sections.forEach((sectionId, index) => {
+                setTimeout(() => {
+                    log(`测试区域: ${sectionId}`);
+                    toggleSection(sectionId);
+                }, index * 1000);
+                
+                setTimeout(() => {
+                    toggleSection(sectionId);
+                }, index * 1000 + 500);
+            });
+            
+            log('测试完成');
+        }
+
+        function checkDisplayLogic() {
+            log('检查显示逻辑...');
+            
+            // 检查基础参数是否默认展开
+            const basicSection = document.getElementById('basicParametersSection');
+            const isBasicExpanded = basicSection.classList.contains('expanded');
+            log(`基础参数区域默认展开: ${isBasicExpanded ? '✅' : '❌'}`);
+            
+            // 检查其他区域是否默认折叠
+            const otherSections = ['nodeParameters', 'modelLoaders', 'controlnetConfigs'];
+            otherSections.forEach(sectionId => {
+                const section = document.getElementById(sectionId + 'Section');
+                const isExpanded = section.classList.contains('expanded');
+                log(`${sectionId}区域默认折叠: ${!isExpanded ? '✅' : '❌'}`);
+            });
+            
+            // 检查内容是否存在
+            const contentAreas = ['basicParametersContent', 'nodeParametersContent', 'modelLoadersContent', 'controlnetConfigsContent'];
+            contentAreas.forEach(contentId => {
+                const content = document.getElementById(contentId);
+                const hasContent = content && content.innerHTML.trim().length > 0;
+                log(`${contentId}有内容: ${hasContent ? '✅' : '❌'}`);
+            });
+            
+            log('显示逻辑检查完成');
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        // 页面加载时自动检查
+        window.addEventListener('load', () => {
+            log('页面加载完成，开始显示逻辑测试...');
+            setTimeout(checkDisplayLogic, 1000);
+        });
+    </script>
+</body>
+</html>

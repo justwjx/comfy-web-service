@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+    </style>
+</head>
+<body>
+    <h1>Debug Test</h1>
+    <div id="results"></div>
+    
+    <script>
+        const results = document.getElementById('results');
+        
+        function addResult(message, isSuccess = true) {
+            const div = document.createElement('div');
+            div.className = `test-result ${isSuccess ? 'success' : 'error'}`;
+            div.textContent = message;
+            results.appendChild(div);
+            console.log(message);
+        }
+        
+        // 测试1: 基本JavaScript功能
+        try {
+            addResult('✓ 基本JavaScript功能正常');
+        } catch (e) {
+            addResult('✗ 基本JavaScript功能失败: ' + e.message, false);
+        }
+        
+        // 测试2: DOM操作
+        try {
+            document.getElementById('results').innerHTML += '<p>DOM操作测试</p>';
+            addResult('✓ DOM操作正常');
+        } catch (e) {
+            addResult('✗ DOM操作失败: ' + e.message, false);
+        }
+        
+        // 测试3: Fetch API
+        fetch('/api/workflows')
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            })
+            .then(data => {
+                if (data.success) {
+                    addResult(`✓ API调用成功，找到 ${data.workflows.length} 个工作流`);
+                } else {
+                    addResult('✗ API返回错误: ' + (data.error || '未知错误'), false);
+                }
+            })
+            .catch(error => {
+                addResult('✗ API调用失败: ' + error.message, false);
+            });
+        
+        // 测试4: ComfyUI状态API
+        fetch('/api/comfyui/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    addResult(`✓ ComfyUI状态检查成功，连接状态: ${data.connected ? '已连接' : '未连接'}`);
+                } else {
+                    addResult('✗ ComfyUI状态检查失败', false);
+                }
+            })
+            .catch(error => {
+                addResult('✗ ComfyUI状态检查失败: ' + error.message, false);
+            });
+    </script>
+</body>
+</html>
+

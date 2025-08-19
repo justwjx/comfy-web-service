@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>页面修复测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .loading { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        #log { background: #f8f9fa; padding: 10px; border-radius: 5px; font-family: monospace; max-height: 300px; overflow-y: auto; }
+        .workflow-item { padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 3px; cursor: pointer; }
+        .workflow-item:hover { background-color: #f0f0f0; }
+        .page-info { background: #e9ecef; padding: 10px; border-radius: 5px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>页面修复测试</h1>
+    
+    <div class="test-section">
+        <h3>页面元素检查</h3>
+        <button onclick="checkPageElements()">检查页面元素</button>
+        <div id="pageElements"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>工作流选择测试</h3>
+        <button onclick="loadWorkflows()">加载工作流列表</button>
+        <div id="workflowList"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>页面切换测试</h3>
+        <button onclick="testPageSwitching()">测试页面切换</button>
+        <div id="pageSwitchResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>控制台日志</h3>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function checkPageElements() {
+            const resultDiv = document.getElementById('pageElements');
+            resultDiv.innerHTML = '<div class="loading">检查中...</div>';
+            
+            try {
+                log('开始检查页面元素...');
+                
+                const elements = [
+                    'loadingState',
+                    'errorState', 
+                    'workflowSelectionPage',
+                    'parameterConfigPage',
+                    'taskStatusPage',
+                    'configWorkflowName',
+                    'configWorkflowType',
+                    'backToWorkflowSelection',
+                    'basicParametersSection',
+                    'nodeParametersSection',
+                    'outputSettingsSection',
+                    'modelLoadersSection',
+                    'controlnetConfigsSection'
+                ];
+                
+                const results = [];
+                elements.forEach(id => {
+                    const element = document.getElementById(id);
+                    if (element) {
+                        results.push(`✅ ${id}: 存在`);
+                    } else {
+                        results.push(`❌ ${id}: 缺失`);
+                    }
+                });
+                
+                resultDiv.innerHTML = `
+                    <div class="page-info">
+                        <h4>页面元素检查结果:</h4>
+                        ${results.map(r => `<div>${r}</div>`).join('')}
+                    </div>
+                `;
+                
+                log(`页面元素检查完成: ${results.filter(r => r.includes('✅')).length}/${results.length} 个元素存在`);
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">检查失败: ${error.message}</div>`;
+                log(`检查失败: ${error.message}`);
+            }
+        }
+
+        async function loadWorkflows() {
+            const listDiv = document.getElementById('workflowList');
+            listDiv.innerHTML = '<div class="loading">加载中...</div>';
+            
+            try {
+                log('开始加载工作流列表...');
+                const response = await fetch('/api/workflows');
+                const data = await response.json();
+                
+                if (data.success) {
+                    log(`成功加载 ${data.workflows.length} 个工作流`);
+                    listDiv.innerHTML = data.workflows.map(workflow => `
+                        <div class="workflow-item" onclick="testWorkflowDetails('${workflow.filename}')">
+                            <strong>${workflow.name}</strong><br>
+                            <small>${workflow.filename}</small>
+                        </div>
+                    `).join('');
+                } else {
+                    listDiv.innerHTML = `<div class="error">加载失败: ${data.error}</div>`;
+                    log(`加载失败: ${data.error}`);
+                }
+            } catch (error) {
+                listDiv.innerHTML = `<div class="error">请求失败: ${error.message}</div>`;
+                log(`请求失败: ${error.message}`);
+            }
+        }
+
+        async function testWorkflowDetails(filename) {
+            try {
+                log(`开始测试工作流详情: ${filename}`);
+                
+                // 模拟页面切换
+                const configPage = document.getElementById('parameterConfigPage');
+                const selectionPage = document.getElementById('workflowSelectionPage');
+                
+                if (configPage && selectionPage) {
+                    selectionPage.style.display = 'none';
+                    configPage.style.display = 'block';
+                    
+                    // 设置工作流名称
+                    const nameEl = document.getElementById('configWorkflowName');
+                    if (nameEl) nameEl.textContent = filename;
+                    
+                    log('页面切换成功');
+                } else {
+                    log('页面元素不存在');
+                }
+                
+            } catch (error) {
+                log(`测试失败: ${error.message}`);
+            }
+        }
+
+        function testPageSwitching() {
+            const resultDiv = document.getElementById('pageSwitchResult');
+            resultDiv.innerHTML = '<div class="loading">测试中...</div>';
+            
+            try {
+                log('开始测试页面切换...');
+                
+                // 测试返回按钮功能
+                const backBtn = document.querySelector('button[onclick*="backToWorkflowSelection"]');
+                if (backBtn) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h4>✅ 返回按钮测试</h4>
+                            <p>返回按钮存在且可点击</p>
+                            <button onclick="simulateBackButton()">模拟返回按钮点击</button>
+                        </div>
+                    `;
+                    log('返回按钮测试通过');
+                } else {
+                    resultDiv.innerHTML = `<div class="error">❌ 返回按钮不存在</div>`;
+                    log('返回按钮不存在');
+                }
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">测试失败: ${error.message}</div>`;
+                log(`测试失败: ${error.message}`);
+            }
+        }
+
+        function simulateBackButton() {
+            try {
+                log('模拟返回按钮点击...');
+                
+                // 模拟返回操作
+                const configPage = document.getElementById('parameterConfigPage');
+                const selectionPage = document.getElementById('workflowSelectionPage');
+                
+                if (configPage && selectionPage) {
+                    configPage.style.display = 'none';
+                    selectionPage.style.display = 'block';
+                    log('返回操作成功');
+                } else {
+                    log('页面元素不存在，无法执行返回操作');
+                }
+                
+            } catch (error) {
+                log(`模拟返回失败: ${error.message}`);
+            }
+        }
+
+        // 页面加载时自动检查
+        window.addEventListener('load', () => {
+            log('页面加载完成，开始自动检查...');
+            setTimeout(checkPageElements, 1000);
+        });
+    </script>
+</body>
+</html>

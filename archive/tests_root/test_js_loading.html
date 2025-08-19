@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JavaScript加载测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .loading { background: #d1ecf1; color: #0c5460; }
+        .log { background: #f8f9fa; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <h1>JavaScript加载测试</h1>
+    
+    <div id="status" class="status loading">正在测试...</div>
+    
+    <div id="results"></div>
+    
+    <div id="console-log" class="log"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const status = document.getElementById('status');
+            const results = document.getElementById('results');
+            const consoleLog = document.getElementById('console-log');
+            
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+            logEntry.className = `status ${type}`;
+            
+            results.appendChild(logEntry);
+            status.textContent = message;
+            status.className = `status ${type}`;
+            
+            // 添加到控制台日志
+            const consoleEntry = document.createElement('div');
+            consoleEntry.textContent = `[${timestamp}] ${message}`;
+            consoleLog.appendChild(consoleEntry);
+            consoleLog.scrollTop = consoleLog.scrollHeight;
+            
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        // 捕获JavaScript错误
+        window.addEventListener('error', function(e) {
+            log(`JavaScript错误: ${e.message} (${e.filename}:${e.lineno})`, 'error');
+        });
+
+        // 捕获未处理的Promise拒绝
+        window.addEventListener('unhandledrejection', function(e) {
+            log(`未处理的Promise拒绝: ${e.reason}`, 'error');
+        });
+
+        // 测试JavaScript文件加载
+        async function testJSLoading() {
+            try {
+                log('开始测试JavaScript文件加载...', 'loading');
+                
+                // 测试prompt-shortcuts.js
+                log('测试 prompt-shortcuts.js...', 'loading');
+                const shortcutsResponse = await fetch('/static/js/prompt-shortcuts.js');
+                if (shortcutsResponse.ok) {
+                    log('✓ prompt-shortcuts.js 加载成功', 'success');
+                } else {
+                    log(`✗ prompt-shortcuts.js 加载失败: ${shortcutsResponse.status}`, 'error');
+                }
+                
+                // 测试prompt-templates.js
+                log('测试 prompt-templates.js...', 'loading');
+                const templatesResponse = await fetch('/static/js/prompt-templates.js');
+                if (templatesResponse.ok) {
+                    log('✓ prompt-templates.js 加载成功', 'success');
+                } else {
+                    log(`✗ prompt-templates.js 加载失败: ${templatesResponse.status}`, 'error');
+                }
+                
+                // 测试app.js
+                log('测试 app.js...', 'loading');
+                const appResponse = await fetch('/static/js/app.js');
+                if (appResponse.ok) {
+                    log('✓ app.js 加载成功', 'success');
+                } else {
+                    log(`✗ app.js 加载失败: ${appResponse.status}`, 'error');
+                }
+                
+                log('JavaScript文件加载测试完成', 'success');
+                
+            } catch (error) {
+                log(`测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 页面加载完成后开始测试
+        window.addEventListener('load', () => {
+            log('页面加载完成，开始测试...', 'loading');
+            setTimeout(testJSLoading, 1000);
+        });
+    </script>
+</body>
+</html>
+

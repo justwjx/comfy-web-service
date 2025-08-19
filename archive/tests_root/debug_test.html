@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Test</title>
+</head>
+<body>
+    <h1>Debug Test</h1>
+    <div id="test">Loading...</div>
+    
+    <script>
+        console.log('Script starting...');
+        
+        // 测试基本功能
+        try {
+            document.getElementById('test').textContent = 'JavaScript is working!';
+            console.log('Basic DOM manipulation works');
+        } catch (e) {
+            console.error('DOM error:', e);
+        }
+        
+        // 测试fetch
+        fetch('/api/workflows')
+            .then(response => response.json())
+            .then(data => {
+                console.log('API response:', data);
+                document.getElementById('test').textContent = 'API works! Found ' + (data.workflows ? data.workflows.length : 0) + ' workflows';
+            })
+            .catch(error => {
+                console.error('API error:', error);
+                document.getElementById('test').textContent = 'API error: ' + error.message;
+            });
+    </script>
+</body>
+</html>
+

@@ -59,3 +59,33 @@ outputs/
 # Temporary files
 *.tmp
 *.temp 
+# 项目清理后添加的忽略项
+logs/*.log
+temp/
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+# 环境文件
+.env
+.env.local
+.env.production
+
+# 日志文件
+app.log
+*.log
+
+# 临时文件
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# IDE文件
+.vscode/
+.idea/
+*.sublime-*

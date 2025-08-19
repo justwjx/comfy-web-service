@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>展开按钮修复测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .loading { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        #log { background: #f8f9fa; padding: 10px; border-radius: 5px; font-family: monospace; max-height: 300px; overflow-y: auto; }
+        .collapsible-header { cursor: pointer; padding: 10px; background: #f8f9fa; border: 1px solid #ddd; margin: 5px 0; }
+        .collapsible-content { padding: 10px; border: 1px solid #ddd; margin: 5px 0; display: none; }
+        .toggle-icon { float: right; transition: transform 0.3s; }
+    </style>
+</head>
+<body>
+    <h1>展开按钮修复测试</h1>
+    
+    <div class="test-section">
+        <h3>模拟展开区域测试</h3>
+        <div id="toggleTest"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>实际页面元素检查</h3>
+        <button onclick="checkPageElements()">检查页面元素</button>
+        <div id="elementCheck"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>控制台日志</h3>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function createToggleTest() {
+            const testDiv = document.getElementById('toggleTest');
+            
+            const sections = [
+                { id: 'basicParameters', title: '基础参数', content: '这是基础参数的内容...' },
+                { id: 'nodeParameters', title: '节点参数', content: '这是节点参数的内容...' },
+                { id: 'modelLoaders', title: '模型加载器', content: '这是模型加载器的内容...' },
+                { id: 'controlnetConfigs', title: 'ControlNet配置', content: '这是ControlNet配置的内容...' },
+                { id: 'outputSettings', title: '输出设置', content: '这是输出设置的内容...' }
+            ];
+            
+            const html = sections.map(section => `
+                <div class="collapsible-section">
+                    <div class="collapsible-header" onclick="toggleTestSection('${section.id}')">
+                        <i class="fas fa-cog"></i> ${section.title}
+                        <i class="toggle-icon" id="${section.id}Toggle">▼</i>
+                    </div>
+                    <div class="collapsible-content" id="${section.id}Content">
+                        ${section.content}
+                    </div>
+                </div>
+            `).join('');
+            
+            testDiv.innerHTML = html;
+            log('创建展开测试区域完成');
+        }
+
+        function toggleTestSection(sectionId) {
+            try {
+                log(`测试切换区域: ${sectionId}`);
+                
+                const toggle = document.getElementById(sectionId + 'Toggle');
+                const content = document.getElementById(sectionId + 'Content');
+                
+                if (!toggle || !content) {
+                    log(`错误: 找不到元素 ${sectionId}Toggle 或 ${sectionId}Content`);
+                    return;
+                }
+                
+                const isCollapsed = content.style.display === 'none';
+                log(`当前状态: ${isCollapsed ? '折叠' : '展开'}`);
+                
+                content.style.display = isCollapsed ? 'block' : 'none';
+                toggle.style.transform = isCollapsed ? 'rotate(180deg)' : 'rotate(0deg)';
+                
+                log(`切换完成，新状态: ${isCollapsed ? '展开' : '折叠'}`);
+                
+            } catch (error) {
+                log(`切换测试失败: ${error.message}`);
+            }
+        }
+
+        function checkPageElements() {
+            const resultDiv = document.getElementById('elementCheck');
+            resultDiv.innerHTML = '<div class="loading">检查中...</div>';
+            
+            try {
+                log('开始检查页面元素...');
+                
+                const elements = [
+                    'basicParametersSection',
+                    'basicParametersToggle', 
+                    'basicParametersContent',
+                    'nodeParametersSection',
+                    'nodeParametersToggle',
+                    'nodeParametersContent',
+                    'modelLoadersSection',
+                    'modelLoadersToggle',
+                    'modelLoadersContent',
+                    'controlnetConfigsSection',
+                    'controlnetConfigsToggle',
+                    'controlnetConfigsContent',
+                    'outputSettingsSection',
+                    'outputSettingsToggle',
+                    'outputSettingsContent'
+                ];
+                
+                const results = [];
+                elements.forEach(id => {
+                    const element = document.getElementById(id);
+                    if (element) {
+                        const display = element.style.display || 'default';
+                        const content = element.textContent || element.innerHTML || '';
+                        const hasContent = content.trim().length > 0;
+                        results.push(`✅ ${id}: 存在 (display: ${display}, 有内容: ${hasContent})`);
+                    } else {
+                        results.push(`❌ ${id}: 缺失`);
+                    }
+                });
+                
+                resultDiv.innerHTML = `
+                    <div class="page-info">
+                        <h4>页面元素检查结果:</h4>
+                        ${results.map(r => `<div>${r}</div>`).join('')}
+                    </div>
+                `;
+                
+                log(`页面元素检查完成: ${results.filter(r => r.includes('✅')).length}/${results.length} 个元素存在`);
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">检查失败: ${error.message}</div>`;
+                log(`检查失败: ${error.message}`);
+            }
+        }
+
+        // 页面加载时自动创建测试
+        window.addEventListener('load', () => {
+            log('页面加载完成，开始展开按钮测试...');
+            setTimeout(createToggleTest, 1000);
+        });
+    </script>
+</body>
+</html>
