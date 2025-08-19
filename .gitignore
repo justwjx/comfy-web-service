@@ -50,6 +50,7 @@ Thumbs.db
 
 # Output files
 outputs/
+output/
 *.png
 *.jpg
 *.jpeg

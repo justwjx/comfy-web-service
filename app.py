@@ -44,43 +44,58 @@ CORS(app)
 
 # 工作流使用统计存储
 BASE_DIR = os.path.dirname(__file__)
-OUTPUT_DIR = os.path.join(BASE_DIR, 'output')
-WORKFLOW_STATS_FILE = os.path.join(OUTPUT_DIR, 'workflow_stats.json')
-LEGACY_WORKFLOW_STATS_FILE = os.path.join(BASE_DIR, 'workflow_stats.json')
+OUTPUTS_DIR = os.path.join(BASE_DIR, 'outputs')
+WORKFLOW_STATS_FILE = os.path.join(OUTPUTS_DIR, 'workflow_stats.json')
+LEGACY_WORKFLOW_STATS_FILE_OUTPUT = os.path.join(BASE_DIR, 'output', 'workflow_stats.json')
+LEGACY_WORKFLOW_STATS_FILE_ROOT = os.path.join(BASE_DIR, 'workflow_stats.json')
 
 def load_workflow_stats():
-    """加载工作流使用统计（支持从根目录旧路径迁移到output目录）"""
+    """加载工作流使用统计（新路径为 outputs/，兼容迁移根目录和 output/ 旧路径）"""
     try:
         # 优先从新位置读取
         if os.path.exists(WORKFLOW_STATS_FILE):
             with open(WORKFLOW_STATS_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
 
-        # 兼容旧位置：根目录
-        if os.path.exists(LEGACY_WORKFLOW_STATS_FILE):
-            with open(LEGACY_WORKFLOW_STATS_FILE, 'r', encoding='utf-8') as f:
+        # 兼容旧位置：output/workflow_stats.json
+        if os.path.exists(LEGACY_WORKFLOW_STATS_FILE_OUTPUT):
+            with open(LEGACY_WORKFLOW_STATS_FILE_OUTPUT, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            # 尝试迁移到新目录
             try:
-                os.makedirs(OUTPUT_DIR, exist_ok=True)
+                os.makedirs(OUTPUTS_DIR, exist_ok=True)
                 with open(WORKFLOW_STATS_FILE, 'w', encoding='utf-8') as nf:
                     json.dump(data, nf, ensure_ascii=False, indent=2)
-                # 迁移成功后删除旧文件
                 try:
-                    os.remove(LEGACY_WORKFLOW_STATS_FILE)
+                    os.remove(LEGACY_WORKFLOW_STATS_FILE_OUTPUT)
                 except Exception:
                     pass
             except Exception as migrate_error:
-                logger.warning(f"迁移工作流统计到输出目录失败: {migrate_error}")
+                logger.warning(f"迁移工作流统计到 outputs/ 失败: {migrate_error}")
+            return data
+
+        # 兼容旧位置：根目录 workflow_stats.json
+        if os.path.exists(LEGACY_WORKFLOW_STATS_FILE_ROOT):
+            with open(LEGACY_WORKFLOW_STATS_FILE_ROOT, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            try:
+                os.makedirs(OUTPUTS_DIR, exist_ok=True)
+                with open(WORKFLOW_STATS_FILE, 'w', encoding='utf-8') as nf:
+                    json.dump(data, nf, ensure_ascii=False, indent=2)
+                try:
+                    os.remove(LEGACY_WORKFLOW_STATS_FILE_ROOT)
+                except Exception:
+                    pass
+            except Exception as migrate_error:
+                logger.warning(f"迁移工作流统计到 outputs/ 失败: {migrate_error}")
             return data
     except Exception as e:
         logger.warning(f"加载工作流统计失败: {e}")
     return {'usage_count': {}, 'recent_usage': {}}
 
 def save_workflow_stats(stats):
-    """保存工作流使用统计（保存到output目录）"""
+    """保存工作流使用统计（保存到 outputs/ 目录）"""
     try:
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        os.makedirs(OUTPUTS_DIR, exist_ok=True)
         with open(WORKFLOW_STATS_FILE, 'w', encoding='utf-8') as f:
             json.dump(stats, f, ensure_ascii=False, indent=2)
     except Exception as e:

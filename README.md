@@ -239,7 +239,7 @@ curl -sS http://127.0.0.1:5000/api/analyze-workflow/your-workflow.json | jq '.an
 - 归档：将项目根目录下的测试文件归档至 `archive/tests_root/`，保持根目录整洁。
 - 忽略规则：
   - 新增 `.dockerignore`，避免归档与输出目录进入容器构建上下文。
-  - 更新 `.gitignore`，忽略 `archive/tests_root/` 与 `output/`。
+  - 更新 `.gitignore`/`.dockerignore`：统一以 `outputs/` 为主目录，兼容旧 `output/`。
 - 前端：持续优化 `static/js/app.js` 的自适应渲染与参数分类逻辑，输出设置区更稳健。
 - 文档与结构：新增/完善 `docs/PROJECT_STRUCTURE*.md` 等结构化文档，补充特性、优化与指南分类目录。
 - 脚本：整合启动与网络切换脚本（`start.sh`、`scripts/ipv6_switch.sh`、`scripts/quick_switch.sh` 等），提升日常运维效率。
