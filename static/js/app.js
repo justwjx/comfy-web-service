@@ -21,6 +21,7 @@ class ComfyWebApp {
         
         // 使用新的提示词系统
         this.promptSystem = new PromptShortcutSystem();
+        this.promptTemplates = new PromptTemplates();
         this.lastPresetLabel = '';
         this.shortcutContext = {};
         this.init();
@@ -1997,7 +1998,7 @@ class ComfyWebApp {
         const isTxt2Img = mode === 'text-to-image';
         const isImg2Img = mode === 'image-to-image';
 
-        // 记录当前快捷分组上下文，供“最近/最常用”类型过滤使用
+        // 记录当前快捷分组上下文，供"最近/最常用"类型过滤使用
         this.shortcutContext = { isFlux, isTxt2Img, isImg2Img };
 
         if (hint) {
@@ -2007,7 +2008,7 @@ class ComfyWebApp {
         // 定义分组数据
         const groups = this.buildPromptShortcutGroups({ isFlux, isTxt2Img, isImg2Img });
 
-        // 不再插入静态的“LoRA 触发词”组，改为选择LoRA后动态插入（见 prependLoraPromptShortcuts）
+        // 不再插入静态的"LoRA 触发词"组，改为选择LoRA后动态插入（见 prependLoraPromptShortcuts）
 
         // 在最上方插入：最近使用、最常用
         const topGroups = [];
@@ -2108,7 +2109,7 @@ class ComfyWebApp {
             }
         } catch (_) {}
 
-        // 最终兜底：观察 LoRA 信息提示块变化（loraInfo_*），一旦出现“触发词:”文本或提示列表，立即插入快捷区
+        // 最终兜底：观察 LoRA 信息提示块变化（loraInfo_*），一旦出现"触发词:"文本或提示列表，立即插入快捷区
         try { this.observeLoraInfoAndInsertShortcuts(); } catch (_) {}
     }
 
@@ -2116,7 +2117,7 @@ class ComfyWebApp {
     observeLoraInfoAndInsertShortcuts() {
         const parseTriggersFromHint = (el) => {
             if (!el) return [];
-            // 严格只从“触发词:”那一行解析，避免把评论 tips 当作触发词
+            // 严格只从"触发词:"那一行解析，避免把评论 tips 当作触发词
             const triggerLine = el.querySelector('div');
             if (!triggerLine) return [];
             const text = triggerLine.textContent || '';
@@ -2348,159 +2349,7 @@ class ComfyWebApp {
         return groups;
     }
 
-    /*  已清理的旧代码块
-                    { label: '人像摄影', prompt: 'A professional portrait photograph with natural lighting and shallow depth of field, detailed skin texture, sharp eyes, high resolution' },
-                    { label: '街头摄影', prompt: 'A candid street photography scene with natural lighting, authentic moment captured, urban environment, photojournalistic style' },
-                    { label: '风景摄影', prompt: 'A landscape photograph with dramatic natural lighting, wide composition, detailed textures, professional camera work' },
-                    { label: '建筑摄影', prompt: 'An architectural photograph with clean lines, geometric composition, natural or dramatic lighting, detailed structure' },
-                    { label: '产品摄影', prompt: 'A professional product photograph with clean background, even lighting, detailed textures, commercial quality' },
-                    { label: '微距摄影', prompt: 'A macro photograph showing intricate details, shallow depth of field, sharp focus on subject, natural textures visible' }
-                ]
-            },
-            {
-                title: '🎨 艺术类', badges: ['Flux'], items: [
-                    { label: '数字绘画', prompt: 'A digital painting with painterly brushstrokes, rich colors, artistic composition, detailed illustration' },
-                    { label: '概念艺术', prompt: 'A concept art illustration with cinematic composition, detailed environment design, professional artwork' },
-                    { label: '角色设计', prompt: 'A character design illustration with detailed features, expressive pose, clean art style, professional character art' },
-                    { label: '环境设计', prompt: 'An environment design illustration showing detailed landscapes or interiors, atmospheric lighting, concept art style' },
-                    { label: '科幻艺术', prompt: 'A science fiction digital artwork with futuristic elements, detailed technology, atmospheric composition' },
-                    { label: '奇幻艺术', prompt: 'A fantasy digital artwork with magical elements, detailed creatures or environments, imaginative composition' }
-                ]
-            },
-            {
-                title: '🌟 光影技法', badges: ['Flux'], items: [
-                    { label: '自然光', prompt: 'Natural daylight streaming through windows, soft ambient lighting, realistic shadows and highlights' },
-                    { label: '黄金时刻', prompt: 'Golden hour lighting with warm, soft sunlight, long shadows, cinematic atmosphere' },
-                    { label: '工作室灯光', prompt: 'Professional studio lighting setup with key light, fill light, and rim light, controlled shadows' },
-                    { label: '戏剧性光影', prompt: 'Dramatic chiaroscuro lighting with strong contrast between light and shadow, moody atmosphere' },
-                    { label: '环境光', prompt: 'Ambient environmental lighting that feels natural and realistic, soft indirect illumination' },
-                    { label: '逆光效果', prompt: 'Beautiful backlighting creating rim light around subject, luminous and ethereal quality' }
-                ]
-            },
-            {
-                title: '🏞️ 场景环境', badges: ['Flux'], items: [
-                    { label: '自然风光', prompt: 'A stunning natural landscape with detailed terrain, beautiful sky, realistic atmospheric perspective and natural colors' },
-                    { label: '城市建筑', prompt: 'Urban cityscape with detailed architecture, realistic lighting, atmospheric depth, modern or historical buildings' },
-                    { label: '室内空间', prompt: 'An interior space with natural lighting, detailed furnishings, realistic materials and textures, architectural accuracy' },
-                    { label: '海洋场景', prompt: 'Ocean or seaside scene with realistic water, dynamic waves, natural lighting, detailed coastal elements' },
-                    { label: '森林山景', prompt: 'Forest or mountain landscape with detailed vegetation, natural lighting, atmospheric perspective, seasonal characteristics' },
-                    { label: '天空气象', prompt: 'Dramatic sky with realistic cloud formations, natural lighting conditions, atmospheric effects and weather patterns' }
-                ]
-            }
-        ];
-
-        // ============== FLUX 图生图提示词库 ==============
-        const fluxImageToImageGroups = [
-            {
-                title: '🎯 精确编辑', badges: ['Flux', 'Redux'], items: [
-                    { label: '人物一致性', prompt: 'Keep the person identical with same facial features, expression, and pose. Maintain all physical characteristics and identity.' },
-                    { label: '对象颜色替换', prompt: 'Change only the color of the specified object while preserving its shape, texture, lighting, and all other properties.' },
-                    { label: '背景完全替换', prompt: 'Replace the entire background with a new environment while keeping the main subject completely unchanged in position and appearance.' },
-                    { label: '局部细节修改', prompt: 'Modify only the specified detail while keeping everything else exactly the same. Focus on precise, targeted changes.' },
-                    { label: '材质纹理改变', prompt: 'Change the material or texture of the object while maintaining its shape, color, and lighting conditions.' },
-                    { label: '光照条件调整', prompt: 'Adjust the lighting conditions while keeping all objects and composition exactly the same.' }
-                ]
-            },
-            {
-                title: '🎨 风格迁移', badges: ['Flux'], items: [
-                    { label: '水彩画风', prompt: 'Transform into a watercolor painting style with soft, flowing edges and translucent washes while keeping the composition intact.' },
-                    { label: '油画质感', prompt: 'Convert to oil painting style with visible brushstrokes, rich impasto texture, and painterly quality while preserving the subject.' },
-                    { label: '铅笔素描', prompt: 'Transform into a detailed pencil sketch with natural graphite shading and fine line work while maintaining composition.' },
-                    { label: '数字艺术', prompt: 'Convert to clean digital art style with smooth rendering, vibrant colors, and modern illustration quality.' },
-                    { label: '动漫风格', prompt: 'Transform into anime or manga art style with clean lineart, cel-shaded coloring, and stylized features.' },
-                    { label: '概念设计', prompt: 'Convert to concept art style with painterly quality, atmospheric effects, and professional illustration appearance.' }
-                ]
-            }
-        ];
-
-        // ============== 工作流专用提示词库 ==============
-        const reduxSpecificGroups = [
-            {
-                title: '🔧 Redux精准编辑', badges: ['Redux'], items: [
-                    { label: '保持身份特征', prompt: 'Maintain the exact same person with identical facial features, bone structure, and expression. No changes to identity.' },
-                    { label: '服装款式替换', prompt: 'Change only the clothing style while keeping the person, pose, and background exactly the same.' },
-                    { label: '发型颜色调整', prompt: 'Modify only the hair color or style while maintaining all other facial features and identity.' },
-                    { label: '物体移除重建', prompt: 'Remove the specified object and reconstruct the background seamlessly with matching textures.' },
-                    { label: '季节环境切换', prompt: 'Change the season or weather while keeping all subjects and main composition unchanged.' },
-                    { label: '照片品质提升', prompt: 'Enhance image quality, sharpness, and details while preserving all original content exactly.' }
-                ]
-            }
-        ];
-
-        const controlnetSpecificGroups = [
-            {
-                title: '🎮 ControlNet引导', badges: ['ControlNet'], items: [
-                    { label: '姿势控制', prompt: 'Follow the pose reference exactly, detailed human anatomy, natural movement, realistic proportions.' },
-                    { label: '边缘引导', prompt: 'Respect the edge map precisely, maintain structural accuracy, detailed line art interpretation.' },
-                    { label: '深度控制', prompt: 'Follow depth information accurately, realistic spatial relationships, proper foreground and background.' },
-                    { label: '语义分割', prompt: 'Respect the segmentation map, accurate object boundaries, realistic material transitions.' },
-                    { label: '法线贴图', prompt: 'Follow surface normal information, accurate lighting response, realistic material properties.' },
-                    { label: '线稿上色', prompt: 'Color the line art beautifully, respect line boundaries, harmonious color palette, clean coloring.' }
-                ]
-            }
-        ];
-
-        const outpaintSpecificGroups = [
-            {
-                title: '🖼️ 画布扩展', badges: ['Outpaint'], items: [
-                    { label: '左右对称扩展', prompt: 'Extend the canvas symmetrically while maintaining the central composition, consistent style and lighting.' },
-                    { label: '上下自然扩展', prompt: 'Expand vertically with natural continuation of the scene, matching perspective and atmospheric depth.' },
-                    { label: '环境完整补全', prompt: 'Complete the environment logically, add contextual elements that make sense with the existing scene.' },
-                    { label: '风格一致延续', prompt: 'Extend with perfect style consistency, matching colors, textures, and artistic approach throughout.' },
-                    { label: '透视准确延伸', prompt: 'Maintain correct perspective when extending, accurate vanishing points and spatial relationships.' },
-                    { label: '无缝边界融合', prompt: 'Create seamless transitions at the expansion boundaries, no visible seams or inconsistencies.' }
-                ]
-            }
-        ];
-
-        // ============== 传统模型兼容提示词库 ==============
-        const legacyGroups = [
-            {
-                title: '经典摄影', badges: ['Legacy'], items: [
-                    { label: '人像摄影', prompt: '8k, ultra detailed, high dynamic range, portrait, natural skin texture, softbox lighting, catchlight in eyes, sharp focus, masterpiece, best quality' },
-                    { label: '风景摄影', prompt: '8k, ultra detailed, landscape photography, dramatic lighting, wide angle, natural colors, atmospheric perspective, sharp focus, masterpiece, best quality' },
-                    { label: '产品摄影', prompt: '8k, ultra detailed, product photography, clean background, studio lighting, professional quality, sharp focus, masterpiece, best quality' }
-                ]
-            },
-            {
-                title: '艺术插画', badges: ['Legacy'], items: [
-                    { label: '数字绘画', prompt: '8k, ultra detailed, digital painting, highly detailed, intricate linework, rich colors, artistic composition, masterpiece, best quality' },
-                    { label: '概念艺术', prompt: '8k, ultra detailed, concept art, cinematic composition, detailed environment, professional artwork, masterpiece, best quality' },
-                    { label: '角色设计', prompt: '8k, ultra detailed, character design, detailed features, expressive pose, clean art style, masterpiece, best quality' }
-                ]
-            }
-        ];
-
-        // ============== 智能路由逻辑 ==============
-        let groups = [];
-        
-        if (isFlux) {
-            if (isTxt2Img) {
-                // Flux文生图：使用现代自然语言提示词
-                groups = fluxTextToImageGroups;
-            } else if (isImg2Img) {
-                // Flux图生图：使用精确编辑和风格迁移提示词
-                groups = fluxImageToImageGroups;
-                
-                // 根据具体工作流类型添加专用提示词
-                if (filename.includes('redux')) {
-                    groups = [...reduxSpecificGroups, ...groups];
-                } else if (filename.includes('controlnet')) {
-                    groups = [...controlnetSpecificGroups, ...groups];
-                } else if (filename.includes('outpaint') || filename.includes('fill')) {
-                    groups = [...outpaintSpecificGroups, ...groups];
-                }
-            } else {
-                // 默认Flux提示词
-                groups = fluxTextToImageGroups;
-            }
-        } else {
-            // 传统模型：使用经典提示词
-            groups = legacyGroups;
-        }
-        
-        return groups;
-    }
+    /*  已清理的旧代码块 */
 
     applyPromptShortcut(item) {
         const positiveEl = document.getElementById('positivePrompt');
@@ -2616,9 +2465,7 @@ class ComfyWebApp {
         } catch (_) {}
     }
 
-    /* 原始旧数据注释掉
-                    { label: '肖像特写', prompt: 'A detailed portrait of a person with expressive eyes, natural skin texture, professional photography lighting' },
-                    { label: '全身人像', prompt: 'A full-body portrait showing complete figure with natural pose, good composition, detailed clothing and background' },
+    /* 原始旧数据注释掉 */
                     { label: '情绪表达', prompt: 'A person displaying genuine emotion through facial expression and body language, captured authentically' },
                     { label: '职业形象', prompt: 'A professional portrait in business attire, confident posture, clean background, corporate photography style' },
                     { label: '生活瞬间', prompt: 'A candid moment of daily life, natural expression and movement, documentary photography style' },
@@ -3256,7 +3103,7 @@ class ComfyWebApp {
             { label: 'HDR冷暖', prompt: 'Balanced HDR with cool shadows and warm highlights.' }
         ]);
 
-        // ===== 将同类子分组整合为“总分组 + 子分组”结构 =====
+        // ===== 将同类子分组整合为"总分组 + 子分组"结构 =====
         const findByTitle = (arr, title) => arr.find(g => g.title === title);
 
         if (isFlux && isTxt2Img) {
@@ -3357,25 +3204,13 @@ class ComfyWebApp {
 
         return [];
     }
-    */
-
-    
-
-    // 本地使用统计（最近/最常用）
-    getShortcutUsageStore() {
-        const raw = localStorage.getItem('cw_shortcut_usage');
-        try { return raw ? JSON.parse(raw) : {}; } catch { return {}; }
-    }
-    saveShortcutUsageStore(store) {
-        try { localStorage.setItem('cw_shortcut_usage', JSON.stringify(store)); } catch {}
-    }
     recordShortcutUsage(item) {
         const key = `${item.label}|${(item.prompt || '').slice(0,200)}`;
         const store = this.getShortcutUsageStore();
         if (!store[key]) {
             store[key] = { label: item.label, prompt: item.prompt || '', count: 0, lastTs: 0 };
         }
-        // 标注当前使用的工作流类型键，供“最近/最常用”筛选
+        // 标注当前使用的工作流类型键，供"最近/最常用"筛选
         const ctx = this.shortcutContext || {};
         const typeKey = `${ctx.isFlux ? 'flux' : 'std'}:${ctx.isTxt2Img ? 'txt2img' : (ctx.isImg2Img ? 'img2img' : 'other')}`;
         store[key].typeKey = typeKey;
@@ -3932,7 +3767,7 @@ class ComfyWebApp {
         try {
             const canvas = document.getElementById('maskDrawCanvas');
             if (!canvas || canvas.width === 0) { this.closeMaskEditor(); return; }
-            // 导出当前 mask，使用“透明背景 + 白色前景”的Alpha通道作为遮罩
+            // 导出当前 mask，使用"透明背景 + 白色前景"的Alpha通道作为遮罩
             const tmp = document.createElement('canvas'); tmp.width = canvas.width; tmp.height = canvas.height;
             const tctx = tmp.getContext('2d');
             // 保持透明背景，不要填充不透明底色
@@ -3940,8 +3775,8 @@ class ComfyWebApp {
             // 贴入用户绘制层（白色笔迹，透明背景）
             tctx.globalCompositeOperation = 'source-over';
             tctx.drawImage(canvas, 0, 0);
-            // 默认：将“涂抹区域”视为需要重绘（alpha=1）。
-            // 若勾选“反向遮罩”，表示涂抹区域保留（不重绘），此时不反转。
+            // 默认：将"涂抹区域"视为需要重绘（alpha=1）。
+            // 若勾选"反向遮罩"，表示涂抹区域保留（不重绘），此时不反转。
             const invertChecked = document.getElementById('maskInvert').checked;
             const shouldInvertAlpha = !invertChecked; // 默认反转，使涂抹区域=需要修改
             if (shouldInvertAlpha) {
@@ -4842,6 +4677,483 @@ class ComfyWebApp {
         const div = document.createElement('div');
         div.textContent = text || '';
         return div.innerHTML;
+    }
+    
+    // 提示词管理功能
+    showPromptManager() {
+        const modal = document.getElementById('promptManagerModal');
+        if (modal) {
+            modal.style.display = 'block';
+            this.loadPromptManagerData();
+        }
+    }
+    
+    hidePromptManager() {
+        const modal = document.getElementById('promptManagerModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    }
+    
+    loadPromptManagerData() {
+        this.loadPromptStats();
+        this.loadFavorites();
+        this.setupPromptManagerTabs();
+        this.loadTemplateCategories();
+    }
+    
+    setupPromptManagerTabs() {
+        const tabs = document.querySelectorAll('.prompt-manager-tabs .tab-btn');
+        const panels = document.querySelectorAll('.prompt-panel');
+        
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const targetTab = tab.getAttribute('data-tab');
+                
+                // 更新标签页状态
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                // 更新面板状态
+                panels.forEach(panel => {
+                    panel.classList.remove('active');
+                    if (panel.id === `prompt${targetTab.charAt(0).toUpperCase() + targetTab.slice(1)}Panel`) {
+                        panel.classList.add('active');
+                    }
+                });
+            });
+        });
+    }
+    
+    loadPromptStats() {
+        if (!this.promptSystem) return;
+        
+        const stats = this.promptSystem.getPromptStats();
+        
+        // 更新统计数字
+        document.getElementById('totalUsage').textContent = stats.totalUsage;
+        document.getElementById('uniquePrompts').textContent = stats.uniquePrompts;
+        
+        // 计算今日使用次数
+        const today = new Date().toDateString();
+        const todayUsage = stats.recentUsage.filter(item => 
+            new Date(item.lastUsed).toDateString() === today
+        ).reduce((sum, item) => sum + item.count, 0);
+        document.getElementById('todayUsage').textContent = todayUsage;
+        
+        // 渲染最常用提示词
+        this.renderPromptList('mostUsedPrompts', stats.mostUsed);
+        
+        // 渲染最近使用提示词
+        this.renderPromptList('recentPrompts', stats.recentUsage);
+    }
+    
+    renderPromptList(containerId, items) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        
+        if (items.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-inbox"></i>
+                    <h4>暂无数据</h4>
+                    <p>开始使用提示词后，这里会显示使用统计</p>
+                </div>
+            `;
+            return;
+        }
+        
+        container.innerHTML = items.map(item => `
+            <div class="prompt-item" onclick="app.applyPromptFromManager('${this.escapeHtml(item.label)}', '${this.escapeHtml(item.prompt || '')}')">
+                <div class="prompt-item-header">
+                    <div class="prompt-item-label">${this.escapeHtml(item.label)}</div>
+                    <div class="prompt-item-actions">
+                        <span class="prompt-item-count">${item.count}</span>
+                        <span class="prompt-item-time">${this.formatTime(item.lastUsed)}</span>
+                    </div>
+                </div>
+                <div class="prompt-item-content">${this.escapeHtml(item.prompt || '').substring(0, 100)}${(item.prompt || '').length > 100 ? '...' : ''}</div>
+            </div>
+        `).join('');
+    }
+    
+    formatTime(timestamp) {
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diff = now - date;
+        
+        if (diff < 60000) return '刚刚';
+        if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
+        if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
+        if (diff < 2592000000) return `${Math.floor(diff / 86400000)}天前`;
+        
+        return date.toLocaleDateString();
+    }
+    
+    applyPromptFromManager(label, prompt) {
+        const positiveEl = document.getElementById('positivePrompt');
+        if (positiveEl) {
+            positiveEl.value = prompt;
+            positiveEl.dispatchEvent(new Event('input', { bubbles: true }));
+            positiveEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        
+        this.hidePromptManager();
+        
+        // 显示成功提示
+        this.showToast(`已应用提示词: ${label}`, 'success');
+    }
+    
+    loadFavorites() {
+        const favorites = this.getFavorites();
+        const container = document.getElementById('favoritesList');
+        
+        if (!container) return;
+        
+        if (favorites.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-heart"></i>
+                    <h4>收藏夹为空</h4>
+                    <p>点击"添加当前提示词"来收藏常用的提示词</p>
+                </div>
+            `;
+            return;
+        }
+        
+        container.innerHTML = favorites.map(fav => `
+            <div class="prompt-item">
+                <div class="prompt-item-header">
+                    <div class="prompt-item-label">${this.escapeHtml(fav.label)}</div>
+                    <div class="prompt-item-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="app.applyPromptFromManager('${this.escapeHtml(fav.label)}', '${this.escapeHtml(fav.prompt)}')">
+                            <i class="fas fa-play"></i>
+                        </button>
+                        <button class="btn btn-sm btn-secondary" onclick="app.removeFromFavorites('${this.escapeHtml(fav.label)}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="prompt-item-content">${this.escapeHtml(fav.prompt).substring(0, 100)}${fav.prompt.length > 100 ? '...' : ''}</div>
+            </div>
+        `).join('');
+    }
+    
+    addToFavorites() {
+        const positiveEl = document.getElementById('positivePrompt');
+        const negativeEl = document.getElementById('negativePrompt');
+        
+        if (!positiveEl || !positiveEl.value.trim()) {
+            this.showToast('请先输入提示词', 'warning');
+            return;
+        }
+        
+        const label = prompt('请输入提示词名称:', '我的提示词');
+        if (!label) return;
+        
+        const favorites = this.getFavorites();
+        const newFavorite = {
+            label: label,
+            prompt: positiveEl.value.trim(),
+            negative: negativeEl ? negativeEl.value.trim() : '',
+            timestamp: Date.now()
+        };
+        
+        favorites.push(newFavorite);
+        this.saveFavorites(favorites);
+        
+        this.loadFavorites();
+        this.showToast(`已添加到收藏夹: ${label}`, 'success');
+    }
+    
+    removeFromFavorites(label) {
+        if (!confirm(`确定要删除收藏的提示词"${label}"吗？`)) return;
+        
+        const favorites = this.getFavorites();
+        const filtered = favorites.filter(fav => fav.label !== label);
+        this.saveFavorites(filtered);
+        
+        this.loadFavorites();
+        this.showToast(`已删除收藏: ${label}`, 'success');
+    }
+    
+    getFavorites() {
+        try {
+            return JSON.parse(localStorage.getItem('cw_prompt_favorites') || '[]');
+        } catch (_) {
+            return [];
+        }
+    }
+    
+    saveFavorites(favorites) {
+        try {
+            localStorage.setItem('cw_prompt_favorites', JSON.stringify(favorites));
+        } catch (_) {}
+    }
+    
+    searchFavorites(query) {
+        const favorites = this.getFavorites();
+        const filtered = favorites.filter(fav => 
+            fav.label.toLowerCase().includes(query.toLowerCase()) ||
+            fav.prompt.toLowerCase().toLowerCase().includes(query.toLowerCase())
+        );
+        
+        const container = document.getElementById('favoritesList');
+        if (!container) return;
+        
+        if (filtered.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-search"></i>
+                    <h4>未找到匹配的收藏</h4>
+                    <p>尝试使用不同的关键词搜索</p>
+                </div>
+            `;
+            return;
+        }
+        
+        container.innerHTML = filtered.map(fav => `
+            <div class="prompt-item">
+                <div class="prompt-item-header">
+                    <div class="prompt-item-label">${this.escapeHtml(fav.label)}</div>
+                    <div class="prompt-item-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="app.applyPromptFromManager('${this.escapeHtml(fav.label)}', '${this.escapeHtml(fav.prompt)}')">
+                            <i class="fas fa-play"></i>
+                        </button>
+                        <button class="btn btn-sm btn-secondary" onclick="app.removeFromFavorites('${this.escapeHtml(fav.label)}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="prompt-item-content">${this.escapeHtml(fav.prompt).substring(0, 100)}${fav.prompt.length > 100 ? '...' : ''}</div>
+            </div>
+        `).join('');
+    }
+    
+    searchPrompts(query) {
+        if (!query.trim()) {
+            document.getElementById('searchResults').innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-search"></i>
+                    <h4>搜索提示词</h4>
+                    <p>输入关键词来搜索提示词库</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // 从提示词系统中搜索
+        const searchType = document.getElementById('promptSearchType').value;
+        const results = this.searchPromptLibrary(query, searchType);
+        
+        const container = document.getElementById('searchResults');
+        if (!container) return;
+        
+        if (results.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-search"></i>
+                    <h4>未找到匹配的提示词</h4>
+                    <p>尝试使用不同的关键词搜索</p>
+                </div>
+            `;
+            return;
+        }
+        
+        container.innerHTML = results.map(item => `
+            <div class="prompt-item" onclick="app.applyPromptFromManager('${this.escapeHtml(item.label)}', '${this.escapeHtml(item.prompt)}')">
+                <div class="prompt-item-header">
+                    <div class="prompt-item-label">${this.escapeHtml(item.label)}</div>
+                    <div class="prompt-item-actions">
+                        <span class="prompt-item-count">${item.badge || ''}</span>
+                    </div>
+                </div>
+                <div class="prompt-item-content">${this.escapeHtml(item.prompt).substring(0, 100)}${item.prompt.length > 100 ? '...' : ''}</div>
+            </div>
+        `).join('');
+    }
+    
+    searchPromptLibrary(query, type) {
+        if (!this.promptSystem) return [];
+        
+        const results = [];
+        const context = {
+            isFlux: this.selectedWorkflow?.filename?.toLowerCase().includes('flux') || false,
+            isTxt2Img: !this.selectedWorkflow?.filename?.toLowerCase().includes('kontext') && 
+                      !this.selectedWorkflow?.filename?.toLowerCase().includes('fill') && 
+                      !this.selectedWorkflow?.filename?.toLowerCase().includes('outpaint'),
+            isImg2Img: this.selectedWorkflow?.filename?.toLowerCase().includes('kontext') || 
+                      this.selectedWorkflow?.filename?.toLowerCase().includes('fill') || 
+                      this.selectedWorkflow?.filename?.toLowerCase().includes('outpaint')
+        };
+        
+        const groups = this.promptSystem.buildPromptShortcutGroups(context);
+        
+        groups.forEach(group => {
+            if (type === 'all' || 
+                (type === 'flux' && group.badges?.includes('Flux')) ||
+                (type === 'traditional' && group.badges?.includes('传统'))) {
+                
+                group.items.forEach(item => {
+                    if (item.label.toLowerCase().includes(query.toLowerCase()) ||
+                        item.prompt.toLowerCase().includes(query.toLowerCase())) {
+                        results.push({
+                            ...item,
+                            badge: group.badges?.[0] || ''
+                        });
+                    }
+                });
+            }
+        });
+        
+        return results.slice(0, 20); // 限制结果数量
+    }
+    
+    clearPromptStats() {
+        if (!confirm('确定要清除所有提示词使用统计吗？此操作不可恢复。')) return;
+        
+        if (this.promptSystem && this.promptSystem.clearPromptStats()) {
+            this.loadPromptStats();
+            this.showToast('已清除使用统计', 'success');
+        } else {
+            this.showToast('清除失败', 'error');
+        }
+    }
+    
+    showToast(message, type = 'info') {
+        // 简单的toast提示实现
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = message;
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : type === 'warning' ? '#f59e0b' : '#6366f1'};
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 10000;
+            font-size: 14px;
+            font-weight: 500;
+        `;
+        
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(100%)';
+            toast.style.transition = 'all 0.3s ease';
+            
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
+        }, 3000);
+    }
+    
+    // 模板库功能
+    loadTemplateCategories() {
+        if (!this.promptTemplates) return;
+        
+        const categorySelect = document.getElementById('templateCategory');
+        if (!categorySelect) return;
+        
+        // 分类已经在HTML中预定义了
+        categorySelect.value = '';
+        this.loadTemplateSubcategories();
+    }
+    
+    loadTemplateSubcategories() {
+        if (!this.promptTemplates) return;
+        
+        const categorySelect = document.getElementById('templateCategory');
+        const subcategorySelect = document.getElementById('templateSubcategory');
+        
+        if (!categorySelect || !subcategorySelect) return;
+        
+        const category = categorySelect.value;
+        if (!category) {
+            subcategorySelect.innerHTML = '<option value="">选择子分类...</option>';
+            this.loadTemplateTypes();
+            return;
+        }
+        
+        const templates = this.promptTemplates.templates[category];
+        if (!templates) return;
+        
+        const subcategories = Object.keys(templates);
+        subcategorySelect.innerHTML = '<option value="">选择子分类...</option>' +
+            subcategories.map(sub => `<option value="${sub}">${this.promptTemplates.getSubcategoryName(sub)}</option>`).join('');
+        
+        this.loadTemplateTypes();
+    }
+    
+    loadTemplateTypes() {
+        if (!this.promptTemplates) return;
+        
+        const categorySelect = document.getElementById('templateCategory');
+        const subcategorySelect = document.getElementById('templateSubcategory');
+        const templateList = document.getElementById('templateList');
+        
+        if (!categorySelect || !subcategorySelect || !templateList) return;
+        
+        const category = categorySelect.value;
+        const subcategory = subcategorySelect.value;
+        
+        if (!category || !subcategory) {
+            templateList.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-layer-group"></i>
+                    <h4>选择模板分类</h4>
+                    <p>请先选择分类和子分类来查看可用的模板</p>
+                </div>
+            `;
+            return;
+        }
+        
+        const templates = this.promptTemplates.templates[category]?.[subcategory];
+        if (!templates) return;
+        
+        const templateItems = Object.entries(templates).map(([type, prompt]) => ({
+            type,
+            prompt,
+            label: this.promptTemplates.getTypeName(type)
+        }));
+        
+        templateList.innerHTML = templateItems.map(item => `
+            <div class="prompt-item" onclick="app.applyPromptFromManager('${this.escapeHtml(item.label)}', '${this.escapeHtml(item.prompt)}')">
+                <div class="prompt-item-header">
+                    <div class="prompt-item-label">${this.escapeHtml(item.label)}</div>
+                    <div class="prompt-item-actions">
+                        <span class="prompt-item-count">模板</span>
+                    </div>
+                </div>
+                <div class="prompt-item-content">${this.escapeHtml(item.prompt).substring(0, 100)}${item.prompt.length > 100 ? '...' : ''}</div>
+            </div>
+        `).join('');
+    }
+    
+    applyRandomTemplate() {
+        if (!this.promptTemplates) return;
+        
+        const randomPrompt = this.promptTemplates.generateRandomCombination();
+        if (!randomPrompt) {
+            this.showToast('无法生成随机模板', 'error');
+            return;
+        }
+        
+        const positiveEl = document.getElementById('positivePrompt');
+        if (positiveEl) {
+            positiveEl.value = randomPrompt;
+            positiveEl.dispatchEvent(new Event('input', { bubbles: true }));
+            positiveEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        
+        this.hidePromptManager();
+        this.showToast('已应用随机模板', 'success');
     }
     
     async viewWorkflowDetails(filename) {
