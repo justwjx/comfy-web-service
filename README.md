@@ -7,7 +7,7 @@
 ### 首次使用
 ```bash
 # 1. 配置环境
-./docs/scripts/activate_env.sh
+./scripts/activate_env.sh
 
 # 2. 启动服务 (IPv4模式，性能优化)
 ./start.sh
@@ -19,11 +19,17 @@
 ./start.sh
 
 # 检查状态
-./docs/scripts/ipv6_switch.sh status
+./scripts/ipv6_switch.sh status
 
 # 性能测试
-./docs/scripts/performance_test.sh
+./scripts/performance_test.sh
 ```
+
+### 环境变量
+- `COMFYUI_HOST`：ComfyUI 服务主机（默认 `localhost`）
+- `COMFYUI_PORT`：ComfyUI 服务端口（默认 `8188`）
+- `HOST`：本服务监听地址（默认 `::`，即 IPv6 任意地址，兼容 IPv4）
+- `PORT`：本服务端口（默认 `5000`）
 
 ## 🏗️ 系统架构
 
@@ -186,8 +192,9 @@ curl -sS http://127.0.0.1:5000/api/analyze-workflow/your-workflow.json | jq '.an
 
 ## 🌐 访问地址
 
-- IPv4: `http://172.16.10.224:5000`
-- IPv4: `http://172.16.10.225:5000`
+- 本机默认：`http://127.0.0.1:5000`
+- 局域网：`http://<你的主机IP>:5000`
+- 可通过 `HOST` / `PORT` 环境变量调整监听地址与端口
 
 ## 📚 文档
 
@@ -198,9 +205,33 @@ curl -sS http://127.0.0.1:5000/api/analyze-workflow/your-workflow.json | jq '.an
 ## 🛠️ 脚本工具
 
 - `start.sh` - 主启动脚本
-- `docs/scripts/ipv6_switch.sh` - IPv6模式切换
-- `docs/scripts/quick_switch.sh` - 快速切换
-- `docs/scripts/performance_test.sh` - 性能测试
+- `scripts/ipv6_switch.sh` - IPv6模式切换
+- `scripts/quick_switch.sh` - 快速切换
+- `scripts/performance_test.sh` - 性能测试
+
+## 📡 API 路由简表（核心）
+
+- `GET /api/workflows`：获取可用工作流列表
+- `GET /api/workflow/<filename>`：获取指定工作流 JSON 详情
+- `POST /api/run`：运行工作流（支持参数与图像输入）
+- `GET /api/status/<task_id>`：查询任务状态
+- `GET /api/tasks`：获取任务列表
+- `GET /api/comfyui/status`：ComfyUI 健康检查
+- `GET /api/system-resources`：系统资源信息
+- `POST /api/clean-vram`：释放显存
+- `POST /api/upload`：上传图片/遮罩（保存至 `outputs/uploaded` 或 `outputs/masks`）
+- `GET /api/generated-images`：列出生成的图片
+- `GET /api/image-metadata/<filename>`：获取图片关联元数据
+- `GET /api/workflow-stats`：获取工作流使用统计（最近使用/最热）
+- `GET /api/analyze-workflow/<filename>`：分析工作流结构特性
+- `GET /outputs/<path>`：静态访问生成产物
+
+调试/演示页面：`/`、`/gallery`、`/prompt-manager`、`/debug` 等
+
+## 📂 输出目录
+
+- 统一使用 `outputs/` 存放运行产物（图片、元数据、上传内容、遮罩等）
+- 运行统计 `workflow_stats.json` 也位于 `outputs/`（兼容迁移旧路径 `output/` 与项目根目录）
 
 ## ⚡ 性能特性
 
