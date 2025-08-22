@@ -234,6 +234,9 @@ curl -sS http://127.0.0.1:5000/api/analyze-workflow/your-workflow.json | jq '.an
 - `GET /api/system-resources`：系统资源信息
 - `POST /api/clean-vram`：释放显存
 - `POST /api/upload`：上传图片/遮罩（保存至 `outputs/uploaded` 或 `outputs/masks`）
+- `GET /api/images`：列出可用图片（uploaded/generated 两类，供图片选择弹窗使用）
+- `POST /api/delete-image`：删除单张图片（用于选择器/画廊）
+- `POST /api/delete-images`：批量删除图片（用于选择器/画廊）
 - `GET /api/generated-images`：列出生成的图片
 - `GET /api/image-metadata/<filename>`：获取图片关联元数据
 - `GET /api/workflow-stats`：获取工作流使用统计（最近使用/最热）
@@ -241,6 +244,10 @@ curl -sS http://127.0.0.1:5000/api/analyze-workflow/your-workflow.json | jq '.an
 - `GET /outputs/<path>`：静态访问生成产物
 
 调试/演示页面：`/`、`/gallery`、`/prompt-manager`、`/debug` 等
+
+图片选择弹窗与画廊说明：
+- 选择器依赖：`GET /api/images` 拉取数据、`POST /api/upload` 上传、`GET /outputs/<path>` 读取缩略、以及删除接口。
+- 画廊/元数据依赖：`GET /api/generated-images`、`GET /api/image-metadata/<filename>`。
 
 ## 📂 输出目录
 
@@ -279,15 +286,13 @@ curl -sS http://127.0.0.1:5000/api/analyze-workflow/your-workflow.json | jq '.an
 
 ## 🧾 版本更新
 
-### v0.2.x（当前）
+### v0.9.0-cleanup（当前稳定点）
 
-- 归档：将项目根目录下的测试文件归档至 `archive/tests_root/`，保持根目录整洁。
-- 忽略规则：
-  - 新增 `.dockerignore`，避免归档与输出目录进入容器构建上下文。
-  - 更新 `.gitignore`/`.dockerignore`：统一以 `outputs/` 为主目录，兼容旧 `output/`。
-- 前端：持续优化 `static/js/app.js` 的自适应渲染与参数分类逻辑，输出设置区更稳健。
-- 文档与结构：新增/完善 `docs/PROJECT_STRUCTURE*.md` 等结构化文档，补充特性、优化与指南分类目录。
-- 脚本：整合启动与网络切换脚本（`start.sh`、`scripts/ipv6_switch.sh`、`scripts/quick_switch.sh` 等），提升日常运维效率。
-- 工作流：补充示例工作流（如 `workflow/nunchaku-flux.1-outpaint.json`）。
+- 清理：移除历史备份脚本，避免搜索/编辑干扰；统一以 `outputs/` 为产物目录。
+- Prompt系统：`PromptTemplates` 改为可选依赖，缺失时不阻塞初始化。
+- 图片选择：恢复并完善选择器全流程（`loadImages`/`renderImageTabs`/上传/删除/预览）。
+- 导航与注入：提示词管理器“应用到主界面”带上 `workflow`、`positive`、`negative` 参数；配置页出现回填横幅与撤销。
+- 快捷提示词：新增“最近使用/最常用”分组；收藏/自定义变更实时反映。
+- 分类/徽章管理：新增隐藏与别名配置，并在管理器与配置页间联动。
 
 如需查看历史版本变更，请参考 `docs/` 目录下的各项说明与记录。
