@@ -732,9 +732,26 @@ body {
   transition: var(--transition);
 }
 
+/* 让提示词库筛选下拉复用与主页一致的样式 */
+.filter-select {
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background: var(--bg-color);
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: var(--transition);
+}
+
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
+}
+
+.filter-select:focus {
   outline: none;
   border-color: var(--primary-color);
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);

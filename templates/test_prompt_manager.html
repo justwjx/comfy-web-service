@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>提示词管理器测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>提示词管理器测试</h1>
+        
+        <div class="status info">
+            <strong>测试说明：</strong> 这个页面用于测试提示词管理器的修复效果
+        </div>
+
+        <h2>功能测试</h2>
+        
+        <button class="test-button" onclick="testPromptManager()">测试提示词管理器</button>
+        <button class="test-button" onclick="testPromptShortcuts()">测试提示词快捷系统</button>
+        <button class="test-button" onclick="testLocalStorage()">测试本地存储</button>
+        <button class="test-button" onclick="openPromptManager()">打开提示词管理器</button>
+
+        <div id="testResults"></div>
+    </div>
+
+    <script>
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('testResults');
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.textContent = message;
+            results.appendChild(div);
+        }
+
+        function testPromptManager() {
+            try {
+                // 测试是否能访问提示词管理器页面
+                fetch('/prompt-manager')
+                    .then(response => {
+                        if (response.ok) {
+                            addResult('✅ 提示词管理器页面可以正常访问', 'success');
+                        } else {
+                            addResult('❌ 提示词管理器页面访问失败', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        addResult(`❌ 网络错误: ${error.message}`, 'error');
+                    });
+            } catch (error) {
+                addResult(`❌ 测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        function testPromptShortcuts() {
+            try {
+                // 测试提示词快捷系统脚本
+                fetch('/static/js/prompt-shortcuts.js')
+                    .then(response => {
+                        if (response.ok) {
+                            addResult('✅ 提示词快捷系统脚本可以正常加载', 'success');
+                        } else {
+                            addResult('❌ 提示词快捷系统脚本加载失败', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        addResult(`❌ 脚本加载错误: ${error.message}`, 'error');
+                    });
+            } catch (error) {
+                addResult(`❌ 测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        function testLocalStorage() {
+            try {
+                // 测试本地存储功能
+                localStorage.setItem('test_key', 'test_value');
+                const value = localStorage.getItem('test_key');
+                if (value === 'test_value') {
+                    addResult('✅ 本地存储功能正常', 'success');
+                } else {
+                    addResult('❌ 本地存储功能异常', 'error');
+                }
+                localStorage.removeItem('test_key');
+            } catch (error) {
+                addResult(`❌ 本地存储测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        function openPromptManager() {
+            try {
+                // 在新窗口中打开提示词管理器
+                window.open('/prompt-manager', '_blank');
+                addResult('✅ 已在新窗口中打开提示词管理器', 'success');
+            } catch (error) {
+                addResult(`❌ 打开失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 页面加载时自动运行一些测试
+        window.addEventListener('load', function() {
+            addResult('🔍 开始自动测试...', 'info');
+            setTimeout(testPromptManager, 500);
+            setTimeout(testPromptShortcuts, 1000);
+            setTimeout(testLocalStorage, 1500);
+        });
+    </script>
+</body>
+</html>

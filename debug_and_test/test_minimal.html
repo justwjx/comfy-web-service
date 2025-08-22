@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>最小化测试页面</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        #console { background: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; height: 300px; overflow-y: auto; font-family: monospace; }
+        .loading { display: inline-block; width: 20px; height: 20px; border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <h1>最小化测试页面</h1>
+    
+    <div id="status"></div>
+    
+    <h3>测试步骤：</h3>
+    <button onclick="testStep1()">步骤1: 测试API</button>
+    <button onclick="testStep2()">步骤2: 测试JavaScript加载</button>
+    <button onclick="testStep3()">步骤3: 测试应用初始化</button>
+    <button onclick="clearConsole()">清空控制台</button>
+    
+    <h3>控制台输出：</h3>
+    <div id="console"></div>
+    
+    <script>
+        let testResults = {
+            api: false,
+            js: false,
+            app: false
+        };
+        
+        function log(message, type = 'info') {
+            const console = document.getElementById('console');
+            const timestamp = new Date().toLocaleTimeString();
+            const status = testResults.api && testResults.js && testResults.app ? '✅' : '⏳';
+            console.innerHTML += `[${timestamp}] ${status} ${message}\n`;
+            console.scrollTop = console.scrollHeight;
+        }
+        
+        function updateStatus() {
+            const status = document.getElementById('status');
+            const allPassed = testResults.api && testResults.js && testResults.app;
+            const message = allPassed ? 
+                '所有测试通过 - 系统正常工作' : 
+                `测试进度: API(${testResults.api ? '✅' : '⏳'}) JS(${testResults.js ? '✅' : '⏳'}) APP(${testResults.app ? '✅' : '⏳'})`;
+            const type = allPassed ? 'success' : 'info';
+            status.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+        
+        function clearConsole() {
+            document.getElementById('console').innerHTML = '';
+        }
+        
+        async function testStep1() {
+            log('开始测试API连接...');
+            
+            try {
+                // 测试工作流API
+                log('测试 /api/workflows...');
+                const workflowResponse = await fetch('/api/workflows');
+                const workflowData = await workflowResponse.json();
+                log(`工作流API响应: ${workflowResponse.status} ${workflowResponse.statusText}`);
+                log(`工作流数量: ${workflowData.workflows?.length || 0}`);
+                
+                // 测试ComfyUI状态API
+                log('测试 /api/comfyui/status...');
+                const statusResponse = await fetch('/api/comfyui/status');
+                const statusData = await statusResponse.json();
+                log(`状态API响应: ${statusResponse.status} ${statusResponse.statusText}`);
+                log(`ComfyUI连接状态: ${statusData.connected}`);
+                
+                testResults.api = true;
+                log('✅ API测试完成', 'success');
+                updateStatus();
+            } catch (error) {
+                log(`❌ API测试失败: ${error.message}`, 'error');
+                testResults.api = false;
+                updateStatus();
+            }
+        }
+        
+        async function testStep2() {
+            log('开始测试JavaScript文件加载...');
+            
+            const jsFiles = [
+                '/static/js/prompt-shortcuts.js',
+                '/static/js/prompt-composer.js', 
+                '/static/js/prompt-optimizer.js',
+                '/static/js/app.js'
+            ];
+            
+            let loadedCount = 0;
+            
+            for (const file of jsFiles) {
+                try {
+                    log(`加载 ${file}...`);
+                    const response = await fetch(file);
+                    if (response.ok) {
+                        log(`✅ ${file} 加载成功`);
+                        loadedCount++;
+                    } else {
+                        log(`❌ ${file} 加载失败: ${response.status}`, 'error');
+                    }
+                } catch (error) {
+                    log(`❌ ${file} 加载失败: ${error.message}`, 'error');
+                }
+            }
+            
+            testResults.js = loadedCount === jsFiles.length;
+            log(`JavaScript加载测试完成: ${loadedCount}/${jsFiles.length}`, testResults.js ? 'success' : 'error');
+            updateStatus();
+        }
+        
+        async function testStep3() {
+            log('开始测试应用初始化...');
+            
+            try {
+                // 动态加载JavaScript文件
+                log('动态加载JavaScript文件...');
+                await loadScript('/static/js/prompt-shortcuts.js');
+                await loadScript('/static/js/prompt-composer.js');
+                await loadScript('/static/js/prompt-optimizer.js');
+                await loadScript('/static/js/app.js');
+                
+                log('等待应用初始化...');
+                
+                // 等待应用初始化
+                let attempts = 0;
+                const maxAttempts = 50; // 5秒
+                
+                const checkApp = () => {
+                    attempts++;
+                    if (window.app && window.app.workflows) {
+                        log(`✅ 应用初始化成功，工作流数量: ${window.app.workflows.length}`);
+                        testResults.app = true;
+                        updateStatus();
+                        return;
+                    }
+                    
+                    if (attempts >= maxAttempts) {
+                        log('❌ 应用初始化超时', 'error');
+                        testResults.app = false;
+                        updateStatus();
+                        return;
+                    }
+                    
+                    setTimeout(checkApp, 100);
+                };
+                
+                checkApp();
+                
+            } catch (error) {
+                log(`❌ 应用初始化失败: ${error.message}`, 'error');
+                testResults.app = false;
+                updateStatus();
+            }
+        }
+        
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+        
+        // 页面加载完成后的初始化
+        window.addEventListener('load', () => {
+            log('页面加载完成');
+            updateStatus();
+        });
+        
+        // 捕获全局错误
+        window.addEventListener('error', (event) => {
+            log(`❌ 全局错误: ${event.error?.message || event.message}`, 'error');
+        });
+        
+        // 捕获未处理的Promise拒绝
+        window.addEventListener('unhandledrejection', (event) => {
+            log(`❌ 未处理的Promise拒绝: ${event.reason}`, 'error');
+        });
+    </script>
+</body>
+</html>
+

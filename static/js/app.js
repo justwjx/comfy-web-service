@@ -24,6 +24,7 @@ class ComfyWebApp {
         this.promptTemplates = new PromptTemplates();
         this.lastPresetLabel = '';
         this.shortcutContext = {};
+        this._pendingPositivePrompt = null;
         this.init();
     }
 
@@ -269,11 +270,105 @@ class ComfyWebApp {
     checkUrlParams() {
         const urlParams = new URLSearchParams(window.location.search);
         const workflow = urlParams.get('workflow');
-        if (workflow) {
-            // 延迟执行，确保工作流已加载
-            setTimeout(() => {
-                this.quickSelectWorkflow(workflow);
-            }, 1000);
+        const from = urlParams.get('from');
+        const positive = urlParams.get('positive');
+        const negative = urlParams.get('negative');
+
+        // 从提示词管理器回填正负面提示词
+        if (from === 'prompt-manager' && (positive || negative)) {
+            // 延迟到参数界面渲染后再注入，避免元素未就绪
+            const posText = positive;
+            const negText = negative;
+            let attempts = 0;
+            const tryApply = () => {
+                const positiveEl = document.getElementById('positivePrompt');
+                const negativeEl = document.getElementById('negativePrompt');
+                if (!positiveEl) { if (attempts++ < 25) { setTimeout(tryApply, 200); } return; }
+                try {
+                    const overwrite = document.getElementById('promptOverwriteSwitch')?.checked;
+                    // 记录回填前的值以支持撤销
+                    const prevPositive = (positiveEl.value || '');
+                    const prevNegative = (negativeEl ? (negativeEl.value || '') : '');
+                    if (posText) {
+                        const trimmed = (positiveEl.value || '').trim();
+                        if (overwrite || !trimmed) {
+                            positiveEl.value = posText;
+                        } else {
+                            const needsComma = trimmed.length > 0 && !trimmed.endsWith(',');
+                            positiveEl.value = positiveEl.value + (needsComma ? ', ' : ' ') + posText;
+                        }
+                        positiveEl.dispatchEvent(new Event('input', { bubbles: true }));
+                        positiveEl.dispatchEvent(new Event('change', { bubbles: true }));
+                        // 高亮并聚焦
+                        positiveEl.focus();
+                        const oldOutline = positiveEl.style.outline;
+                        positiveEl.style.outline = '2px solid var(--primary-color)';
+                        setTimeout(() => { positiveEl.style.outline = oldOutline || ''; }, 1200);
+                    }
+                    if (negText && negativeEl) {
+                        const ntrim = (negativeEl.value || '').trim();
+                        if (overwrite || !ntrim) {
+                            negativeEl.value = negText;
+                        } else {
+                            const needsCommaN = ntrim.length > 0 && !ntrim.endsWith(',');
+                            negativeEl.value = negativeEl.value + (needsCommaN ? ', ' : ' ') + negText;
+                        }
+                        negativeEl.dispatchEvent(new Event('input', { bubbles: true }));
+                        negativeEl.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                    // 显示“来自提示词库”的提示条，支持撤销回填
+                    try {
+                        const parent = document.getElementById('parameterConfigPage');
+                        if (parent && !document.getElementById('promptInjectionBanner')) {
+                            const banner = document.createElement('div');
+                            banner.id = 'promptInjectionBanner';
+                            banner.style.cssText = 'margin:10px 0; padding:10px 12px; border:1px solid var(--border-color); background: var(--bg-secondary); border-radius:8px; display:flex; align-items:center; justify-content:space-between; gap:8px;';
+                            banner.innerHTML = '<span>已从提示词库回填。</span>' +
+                                '<div style="display:flex; gap:8px;">' +
+                                '<button id="undoPromptInjectionBtn" class="btn btn-sm btn-secondary">撤销回填</button>' +
+                                '<button id="dismissPromptInjectionBtn" class="btn btn-sm">关闭</button>' +
+                                '</div>';
+                            const container = parent.querySelector('.config-container');
+                            parent.insertBefore(banner, container || parent.firstChild);
+                            const undoBtn = document.getElementById('undoPromptInjectionBtn');
+                            const dismissBtn = document.getElementById('dismissPromptInjectionBtn');
+                            if (undoBtn) {
+                                undoBtn.addEventListener('click', () => {
+                                    try {
+                                        if (positiveEl) {
+                                            positiveEl.value = prevPositive;
+                                            positiveEl.dispatchEvent(new Event('input', { bubbles: true }));
+                                            positiveEl.dispatchEvent(new Event('change', { bubbles: true }));
+                                        }
+                                        if (negativeEl) {
+                                            negativeEl.value = prevNegative;
+                                            negativeEl.dispatchEvent(new Event('input', { bubbles: true }));
+                                            negativeEl.dispatchEvent(new Event('change', { bubbles: true }));
+                                        }
+                                    } catch (_) {}
+                                    try { banner.remove(); } catch (_) {}
+                                });
+                            }
+                            if (dismissBtn) {
+                                dismissBtn.addEventListener('click', () => { try { banner.remove(); } catch (_) {} });
+                            }
+                        }
+                    } catch (_) {}
+                    // 一次性应用后清理URL中的触发参数，避免刷新重复注入
+                    try {
+                        if (window.history && typeof window.history.replaceState === 'function') {
+                            const url = new URL(window.location.href);
+                            url.searchParams.delete('from');
+                            url.searchParams.delete('positive');
+                            url.searchParams.delete('negative');
+                            const newSearch = url.searchParams.toString();
+                            const newUrl = url.pathname + (newSearch ? ('?' + newSearch) : '') + (url.hash || '');
+                            window.history.replaceState(null, '', newUrl);
+                        }
+                    } catch (_) {}
+                } catch (_) {}
+            };
+            setTimeout(tryApply, 600);
         }
     }
     
@@ -406,7 +501,26 @@ class ComfyWebApp {
     }
     
     startWorkflow() {
+        // 若未记录，尝试从下拉菜单读取
+        if (!this.selectedWorkflow) {
+            const sel = document.getElementById('workflowSelect');
+            const val = sel && sel.value;
+            if (val) {
+                this.quickSelectWorkflow(val);
+            }
+        }
         if (!this.selectedWorkflow) return;
+        // 进入配置页前，将工作流写入URL并持久化最近工作流
+        try {
+            if (window.history && typeof window.history.replaceState === 'function') {
+                const url = new URL(window.location.href);
+                url.searchParams.set('workflow', this.selectedWorkflow.filename);
+                const newSearch = url.searchParams.toString();
+                const newUrl = url.pathname + (newSearch ? ('?' + newSearch) : '') + (url.hash || '');
+                window.history.replaceState(null, '', newUrl);
+            }
+        } catch (_) {}
+        try { localStorage.setItem('cw_last_workflow', this.selectedWorkflow.filename); } catch (_) {}
         this.loadWorkflowDetails(this.selectedWorkflow.filename);
     }
     
@@ -1086,6 +1200,21 @@ class ComfyWebApp {
                 console.log('显示选择页面...');
                 this.showPage('selection');
                 
+                // URL/本地参数驱动：自动进入配置页
+                try {
+                    const params = new URLSearchParams(window.location.search);
+                    const wf = params.get('workflow');
+                    const from = params.get('from');
+                    let target = wf;
+                    if (!target && from === 'prompt-manager') {
+                        try { target = localStorage.getItem('cw_last_workflow') || ''; } catch (_) {}
+                    }
+                    if (target) {
+                        // 异步进入配置页
+                        setTimeout(() => this.selectWorkflow(target), 0);
+                    }
+                } catch (_) {}
+                
                 // 更新服务器状态（异步执行，不阻塞页面显示）
                 console.log('更新服务器状态...');
                 this.updateServerStatus(statusResponse).catch(error => {
@@ -1398,6 +1527,8 @@ class ComfyWebApp {
             }
             
             this.selectedWorkflow = workflow;
+            // 记住最近工作流
+            try { localStorage.setItem('cw_last_workflow', workflow.filename); } catch (_) {}
             // 先确定准确类型以驱动界面（提示词/图像输入等）
             try {
                 const type = await this.getAccurateWorkflowType(workflow.filename);
@@ -2074,6 +2205,42 @@ class ComfyWebApp {
                         if (item?.negative) applyToField(negativeEl, item.negative);
                     } catch (_) {}
                 });
+                // 右键菜单：收藏/编辑为自定义/复制/仅插入负面
+                btn.addEventListener('contextmenu', (ev) => {
+                    ev.preventDefault();
+                    const menu = document.createElement('div');
+                    menu.style.cssText = 'position:absolute; z-index:9999; background:var(--card-bg); border:1px solid var(--border-color); border-radius:6px; padding:6px; box-shadow: var(--shadow)';
+                    const makeItem = (text, handler) => {
+                        const a = document.createElement('div'); a.textContent = text; a.style.cssText = 'padding:6px 10px; cursor:pointer;'; a.addEventListener('click', ()=>{ try{ handler(); }catch(_){}; try{ menu.remove(); }catch(_){} }); a.addEventListener('mouseenter', ()=> a.style.background = 'var(--bg-secondary)'); a.addEventListener('mouseleave', ()=> a.style.background = 'transparent'); return a;
+                    };
+                    menu.appendChild(makeItem('收藏/取消收藏', () => {
+                        try { if (self.promptSystem) { const added = self.promptSystem.toggleFavorite(item); self._showToast && self._showToast(added ? '已收藏' : '已取消收藏'); } } catch(_) {}
+                    }));
+                    menu.appendChild(makeItem('保存为自定义...', () => {
+                        try { if (self.promptSystem && typeof self.promptSystem.openInlineEdit === 'function') self.promptSystem.openInlineEdit(item); } catch(_) {}
+                    }));
+                    menu.appendChild(makeItem('复制到剪贴板', () => {
+                        try { navigator.clipboard.writeText(item.prompt || item.label || ''); self._showToast && self._showToast('已复制'); } catch(_) {}
+                    }));
+                    if (item.negative) {
+                        menu.appendChild(makeItem('仅插入负面', () => {
+                            try {
+                                const negativeEl = document.getElementById('negativePrompt');
+                                const overwrite = document.getElementById('promptOverwriteSwitch')?.checked;
+                                const ntrim = (negativeEl?.value || '').trim();
+                                if (negativeEl) {
+                                    if (overwrite || !ntrim) negativeEl.value = item.negative; else negativeEl.value = negativeEl.value + (ntrim.endsWith(',') ? ' ' : ', ') + (item.negative || '');
+                                    negativeEl.dispatchEvent(new Event('input', { bubbles: true }));
+                                    negativeEl.dispatchEvent(new Event('change', { bubbles: true }));
+                                }
+                            } catch(_) {}
+                        }));
+                    }
+                    document.body.appendChild(menu);
+                    const x = ev.clientX, y = ev.clientY; menu.style.left = `${x}px`; menu.style.top = `${y}px`;
+                    const onHide = () => { try { menu.remove(); } catch(_){}; document.removeEventListener('click', onHide); };
+                    document.addEventListener('click', onHide);
+                });
                 subButtons.appendChild(btn);
             });
             subCard.appendChild(subButtons);
@@ -2081,6 +2248,19 @@ class ComfyWebApp {
         });
 
         container.appendChild(grid);
+
+        // 监听收藏/自定义更新事件，实时重绘快捷区
+        try {
+            if (!this._promptEventsBound) {
+                window.addEventListener('cw_prompt_favorites_updated', () => {
+                    try { this.generatePromptShortcuts(analysis); } catch (_) {}
+                });
+                window.addEventListener('cw_prompt_custom_updated', () => {
+                    try { this.generatePromptShortcuts(analysis); } catch (_) {}
+                });
+                this._promptEventsBound = true;
+            }
+        } catch (_) {}
 
         // 渲染完成后，若 LoRA 有默认值，重触发一次以将触发词插入快捷区顶部
         try {
@@ -2453,7 +2633,7 @@ class ComfyWebApp {
 
     getShortcutUsageStore() {
         try {
-            return JSON.parse(localStorage.getItem('shortcut-usage') || '{}');
+            return JSON.parse(localStorage.getItem('cw_shortcut_usage') || '{}');
         } catch (_) {
             return {};
         }
@@ -2461,7 +2641,7 @@ class ComfyWebApp {
 
     saveShortcutUsageStore(data) {
         try {
-            localStorage.setItem('shortcut-usage', JSON.stringify(data));
+            localStorage.setItem('cw_shortcut_usage', JSON.stringify(data));
         } catch (_) {}
     }
 
@@ -4395,8 +4575,20 @@ class ComfyWebApp {
     
     backToWorkflowSelection() {
         this.showPage('selection');
-        this.selectedWorkflow = null;
         this.stopResourceAutoRefresh();
+        // 清理 URL 中的工作流/来源/提示词参数，避免刷新时又自动进入配置页
+        try {
+            if (window.history && typeof window.history.replaceState === 'function') {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('workflow');
+                url.searchParams.delete('from');
+                url.searchParams.delete('positive');
+                url.searchParams.delete('negative');
+                const newSearch = url.searchParams.toString();
+                const newUrl = url.pathname + (newSearch ? ('?' + newSearch) : '') + (url.hash || '');
+                window.history.replaceState(null, '', newUrl);
+            }
+        } catch (_) {}
     }
     
     showLoading() {

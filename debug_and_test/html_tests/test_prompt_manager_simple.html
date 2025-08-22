@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>提示词管理器简单测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .log { background: #f8f9fa; padding: 10px; border-radius: 5px; margin: 10px 0; max-height: 300px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>提示词管理器测试</h1>
+        
+        <div class="test-section">
+            <h3>测试结果</h3>
+            <div id="testResults" class="log"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>操作</h3>
+            <button onclick="runAllTests()">运行所有测试</button>
+            <button onclick="clearLog()">清除日志</button>
+            <button onclick="goToPromptManager()">跳转到提示词管理器</button>
+        </div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const results = document.getElementById('testResults');
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            results.appendChild(div);
+            console.log(message);
+        }
+
+        function clearLog() {
+            document.getElementById('testResults').innerHTML = '';
+        }
+
+        async function testScriptLoading() {
+            log('测试脚本加载...', 'info');
+            
+            try {
+                // 加载 prompt-shortcuts.js
+                const script = document.createElement('script');
+                script.src = '/static/js/prompt-shortcuts.js';
+                document.head.appendChild(script);
+                
+                await new Promise((resolve, reject) => {
+                    script.onload = resolve;
+                    script.onerror = reject;
+                });
+                
+                log('✓ prompt-shortcuts.js 加载成功', 'success');
+                return true;
+            } catch (error) {
+                log(`✗ prompt-shortcuts.js 加载失败: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function testPromptShortcutSystem() {
+            log('测试 PromptShortcutSystem...', 'info');
+            
+            if (typeof PromptShortcutSystem === 'undefined') {
+                log('✗ PromptShortcutSystem 类不存在', 'error');
+                return false;
+            }
+            
+            try {
+                const system = new PromptShortcutSystem();
+                log('✓ PromptShortcutSystem 实例化成功', 'success');
+                
+                const groups = system.buildPromptShortcutGroups({
+                    isFlux: true,
+                    isTxt2Img: true,
+                    isImg2Img: false
+                });
+                
+                log(`✓ 生成提示词组成功，共 ${groups.length} 组`, 'success');
+                
+                let totalItems = 0;
+                groups.forEach(group => {
+                    totalItems += group.items.length;
+                    log(`  - ${group.title}: ${group.items.length} 项`, 'info');
+                });
+                
+                log(`总计: ${totalItems} 个提示词`, 'success');
+                return true;
+            } catch (error) {
+                log(`✗ PromptShortcutSystem 测试失败: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function testPromptManager() {
+            log('测试 PromptManager...', 'info');
+            
+            if (typeof PromptManager === 'undefined') {
+                log('✗ PromptManager 类不存在', 'error');
+                return false;
+            }
+            
+            try {
+                const manager = new PromptManager();
+                log('✓ PromptManager 实例化成功', 'success');
+                
+                // 等待初始化完成
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                log(`所有提示词数量: ${manager.allPrompts.length}`, 'info');
+                log(`筛选后提示词数量: ${manager.filteredPrompts.length}`, 'info');
+                
+                if (manager.allPrompts.length > 0) {
+                    log('✓ 提示词加载成功', 'success');
+                    return true;
+                } else {
+                    log('⚠ 没有加载到提示词', 'error');
+                    return false;
+                }
+            } catch (error) {
+                log(`✗ PromptManager 测试失败: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function runAllTests() {
+            clearLog();
+            log('开始运行所有测试...', 'info');
+            
+            const results = [];
+            
+            // 测试1: 脚本加载
+            results.push(await testScriptLoading());
+            
+            // 测试2: PromptShortcutSystem
+            if (results[0]) {
+                results.push(await testPromptShortcutSystem());
+            }
+            
+            // 测试3: PromptManager
+            if (results[1]) {
+                results.push(await testPromptManager());
+            }
+            
+            // 总结
+            const passed = results.filter(r => r).length;
+            const total = results.length;
+            
+            log(`测试完成: ${passed}/${total} 通过`, passed === total ? 'success' : 'error');
+            
+            if (passed === total) {
+                log('所有测试通过！提示词管理器应该可以正常工作。', 'success');
+            } else {
+                log('部分测试失败，请检查错误信息。', 'error');
+            }
+        }
+
+        function goToPromptManager() {
+            log('跳转到提示词管理器...', 'info');
+            window.location.href = '/prompt-manager';
+        }
+
+        // 页面加载完成后自动运行测试
+        window.addEventListener('load', () => {
+            log('页面加载完成，准备测试...', 'info');
+            setTimeout(runAllTests, 500);
+        });
+    </script>
+</body>
+</html>

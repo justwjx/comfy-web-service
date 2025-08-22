@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>提示词管理器调试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .debug-info { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .error { color: red; }
+        .success { color: green; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>提示词管理器调试页面</h1>
+    
+    <div class="debug-info">
+        <h3>调试信息</h3>
+        <div id="debugOutput"></div>
+    </div>
+    
+    <div>
+        <button onclick="testPromptShortcuts()">测试 PromptShortcutSystem</button>
+        <button onclick="testLocalStorage()">测试 LocalStorage</button>
+        <button onclick="testPromptManager()">测试 PromptManager</button>
+        <button onclick="goToPromptManager()">跳转到提示词管理器</button>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const output = document.getElementById('debugOutput');
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            output.appendChild(div);
+            console.log(message);
+        }
+
+        async function testPromptShortcuts() {
+            log('开始测试 PromptShortcutSystem...');
+            
+            try {
+                // 加载 prompt-shortcuts.js
+                const script = document.createElement('script');
+                script.src = '/static/js/prompt-shortcuts.js';
+                document.head.appendChild(script);
+                
+                await new Promise((resolve, reject) => {
+                    script.onload = resolve;
+                    script.onerror = reject;
+                });
+                
+                log('✓ prompt-shortcuts.js 加载成功', 'success');
+                
+                // 测试 PromptShortcutSystem
+                if (typeof PromptShortcutSystem !== 'undefined') {
+                    log('✓ PromptShortcutSystem 类存在', 'success');
+                    
+                    const system = new PromptShortcutSystem();
+                    log(`✓ PromptShortcutSystem 实例化成功，收藏数: ${system.favorites.length}`, 'success');
+                    
+                    const groups = system.buildPromptShortcutGroups({
+                        isFlux: true,
+                        isTxt2Img: true,
+                        isImg2Img: false
+                    });
+                    
+                    log(`✓ 生成提示词组成功，共 ${groups.length} 组`, 'success');
+                    
+                    let totalItems = 0;
+                    groups.forEach(group => {
+                        totalItems += group.items.length;
+                        log(`  - ${group.title}: ${group.items.length} 项`);
+                    });
+                    
+                    log(`总计: ${totalItems} 个提示词`, 'success');
+                    
+                } else {
+                    log('✗ PromptShortcutSystem 类不存在', 'error');
+                }
+                
+            } catch (error) {
+                log(`✗ 测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        function testLocalStorage() {
+            log('开始测试 LocalStorage...');
+            
+            try {
+                // 测试基本功能
+                localStorage.setItem('test_key', 'test_value');
+                const value = localStorage.getItem('test_key');
+                localStorage.removeItem('test_key');
+                
+                if (value === 'test_value') {
+                    log('✓ LocalStorage 基本功能正常', 'success');
+                } else {
+                    log('✗ LocalStorage 基本功能异常', 'error');
+                }
+                
+                // 测试提示词相关数据
+                const favorites = localStorage.getItem('cw_prompt_favorites');
+                const custom = localStorage.getItem('cw_prompt_custom');
+                const meta = localStorage.getItem('cw_prompt_meta');
+                
+                log(`收藏数据: ${favorites ? '存在' : '不存在'}`);
+                log(`自定义数据: ${custom ? '存在' : '不存在'}`);
+                log(`元数据: ${meta ? '存在' : '不存在'}`);
+                
+            } catch (error) {
+                log(`✗ LocalStorage 测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testPromptManager() {
+            log('开始测试 PromptManager...');
+            
+            try {
+                // 先确保 PromptShortcutSystem 已加载
+                if (typeof PromptShortcutSystem === 'undefined') {
+                    log('先加载 PromptShortcutSystem...');
+                    await testPromptShortcuts();
+                }
+                
+                // 测试 PromptManager 类
+                if (typeof PromptManager !== 'undefined') {
+                    log('✓ PromptManager 类存在', 'success');
+                    
+                    const manager = new PromptManager();
+                    log('✓ PromptManager 实例化成功', 'success');
+                    
+                    log(`所有提示词数量: ${manager.allPrompts.length}`);
+                    log(`筛选后提示词数量: ${manager.filteredPrompts.length}`);
+                    
+                } else {
+                    log('✗ PromptManager 类不存在', 'error');
+                }
+                
+            } catch (error) {
+                log(`✗ PromptManager 测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        function goToPromptManager() {
+            log('跳转到提示词管理器...');
+            window.location.href = '/prompt-manager';
+        }
+
+        // 页面加载完成后的初始化
+        window.addEventListener('load', () => {
+            log('页面加载完成，开始自动测试...');
+            testPromptShortcuts();
+        });
+    </script>
+</body>
+</html>

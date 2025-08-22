@@ -22,7 +22,7 @@
 ./scripts/ipv6_switch.sh status
 
 # 性能测试
-./scripts/performance_test.sh
+./debug_and_test/scripts/performance_test.sh
 ```
 
 ### 环境变量
@@ -207,7 +207,21 @@ curl -sS http://127.0.0.1:5000/api/analyze-workflow/your-workflow.json | jq '.an
 - `start.sh` - 主启动脚本
 - `scripts/ipv6_switch.sh` - IPv6模式切换
 - `scripts/quick_switch.sh` - 快速切换
-- `scripts/performance_test.sh` - 性能测试
+- `debug_and_test/scripts/performance_test.sh` - 性能测试（已迁移至调试与测试目录）
+
+### 🧪 调试与测试目录
+
+所有测试相关脚本与页面已统一归档至 `debug_and_test/`：
+
+- `debug_and_test/scripts/`：Shell 测试脚本（如 `performance_test.sh`）
+- `debug_and_test/python_tests/`：Python 测试脚本（如 `test_ipv6.py`）
+- `debug_and_test/html_tests/`：前端调试/测试页面（如 `test_prompt_manager_simple.html`、`debug_prompt_manager.html`）
+
+注意：若文档或历史命令中仍出现 `scripts/performance_test.sh` 或根目录 `performance_test.sh`，请改用：
+
+```bash
+./debug_and_test/scripts/performance_test.sh
+```
 
 ## 📡 API 路由简表（核心）
 

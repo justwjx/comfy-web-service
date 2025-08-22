@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>隔离测试页面</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        #console { background: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; height: 400px; overflow-y: auto; font-family: monospace; }
+        .loading { display: inline-block; width: 20px; height: 20px; border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <h1>隔离测试页面</h1>
+    
+    <div id="status"></div>
+    
+    <h3>测试步骤：</h3>
+    <button onclick="testBasicAPI()">测试基本API</button>
+    <button onclick="testJSLoad()">测试JS加载</button>
+    <button onclick="testAppInit()">测试应用初始化</button>
+    <button onclick="clearConsole()">清空控制台</button>
+    
+    <h3>控制台输出：</h3>
+    <div id="console"></div>
+    
+    <script>
+        let appInstance = null;
+        
+        function log(message, type = 'info') {
+            const console = document.getElementById('console');
+            const timestamp = new Date().toLocaleTimeString();
+            console.innerHTML += `[${timestamp}] ${message}\n`;
+            console.scrollTop = console.scrollHeight;
+        }
+        
+        function updateStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+        
+        function clearConsole() {
+            document.getElementById('console').innerHTML = '';
+        }
+        
+        async function testBasicAPI() {
+            log('=== 开始测试基本API ===');
+            
+            try {
+                log('测试 /api/workflows...');
+                const response = await fetch('/api/workflows');
+                const data = await response.json();
+                log(`状态: ${response.status} ${response.statusText}`);
+                log(`成功: ${data.success}`);
+                log(`工作流数量: ${data.workflows?.length || 0}`);
+                
+                if (data.success) {
+                    updateStatus('✅ API测试通过', 'success');
+                } else {
+                    updateStatus('❌ API测试失败', 'error');
+                }
+            } catch (error) {
+                log(`❌ API测试失败: ${error.message}`);
+                updateStatus(`❌ API测试失败: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testJSLoad() {
+            log('=== 开始测试JavaScript加载 ===');
+            
+            try {
+                // 测试每个JS文件
+                const files = [
+                    '/static/js/prompt-shortcuts.js',
+                    '/static/js/prompt-composer.js',
+                    '/static/js/prompt-optimizer.js',
+                    '/static/js/app.js'
+                ];
+                
+                for (const file of files) {
+                    log(`加载 ${file}...`);
+                    const response = await fetch(file);
+                    if (response.ok) {
+                        log(`✅ ${file} 可访问`);
+                    } else {
+                        log(`❌ ${file} 不可访问: ${response.status}`);
+                    }
+                }
+                
+                // 尝试动态加载
+                log('尝试动态加载JavaScript文件...');
+                await loadScript('/static/js/prompt-shortcuts.js');
+                log('✅ prompt-shortcuts.js 加载完成');
+                
+                await loadScript('/static/js/prompt-composer.js');
+                log('✅ prompt-composer.js 加载完成');
+                
+                await loadScript('/static/js/prompt-optimizer.js');
+                log('✅ prompt-optimizer.js 加载完成');
+                
+                await loadScript('/static/js/app.js');
+                log('✅ app.js 加载完成');
+                
+                updateStatus('✅ JavaScript加载测试通过', 'success');
+                
+            } catch (error) {
+                log(`❌ JavaScript加载失败: ${error.message}`);
+                updateStatus(`❌ JavaScript加载失败: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testAppInit() {
+            log('=== 开始测试应用初始化 ===');
+            
+            try {
+                // 检查全局变量
+                log('检查全局变量...');
+                log(`window.PromptShortcutSystem: ${typeof window.PromptShortcutSystem}`);
+                log(`window.promptComposer: ${typeof window.promptComposer}`);
+                log(`window.promptOptimizer: ${typeof window.promptOptimizer}`);
+                
+                // 等待应用初始化
+                log('等待应用初始化...');
+                let attempts = 0;
+                const maxAttempts = 100; // 10秒
+                
+                const checkApp = () => {
+                    attempts++;
+                    
+                    if (window.app) {
+                        log(`✅ 应用实例已创建`);
+                        log(`应用类型: ${typeof window.app}`);
+                        log(`工作流数量: ${window.app.workflows?.length || 0}`);
+                        
+                        // 测试基本方法
+                        if (typeof window.app.loadWorkflows === 'function') {
+                            log('✅ loadWorkflows 方法存在');
+                        } else {
+                            log('❌ loadWorkflows 方法不存在');
+                        }
+                        
+                        if (typeof window.app.renderWorkflows === 'function') {
+                            log('✅ renderWorkflows 方法存在');
+                        } else {
+                            log('❌ renderWorkflows 方法不存在');
+                        }
+                        
+                        appInstance = window.app;
+                        updateStatus('✅ 应用初始化测试通过', 'success');
+                        return;
+                    }
+                    
+                    if (attempts >= maxAttempts) {
+                        log('❌ 应用初始化超时');
+                        updateStatus('❌ 应用初始化超时', 'error');
+                        return;
+                    }
+                    
+                    setTimeout(checkApp, 100);
+                };
+                
+                checkApp();
+                
+            } catch (error) {
+                log(`❌ 应用初始化测试失败: ${error.message}`);
+                updateStatus(`❌ 应用初始化测试失败: ${error.message}`, 'error');
+            }
+        }
+        
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+        
+        // 页面加载完成后的初始化
+        window.addEventListener('load', () => {
+            log('页面加载完成');
+            updateStatus('页面加载完成，可以开始测试', 'info');
+        });
+        
+        // 捕获全局错误
+        window.addEventListener('error', (event) => {
+            log(`❌ 全局错误: ${event.error?.message || event.message}`);
+        });
+        
+        // 捕获未处理的Promise拒绝
+        window.addEventListener('unhandledrejection', (event) => {
+            log(`❌ 未处理的Promise拒绝: ${event.reason}`);
+        });
+    </script>
+</body>
+</html>
+

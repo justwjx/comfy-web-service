@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>修复加载问题</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        .loading { display: inline-block; width: 20px; height: 20px; border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <h1>修复首页加载问题</h1>
+    
+    <div id="status"></div>
+    
+    <h3>问题诊断和解决方案：</h3>
+    
+    <h4>1. 测试API连接</h4>
+    <button onclick="testAPI()">测试API</button>
+    <div id="apiResult"></div>
+    
+    <h4>2. 测试JavaScript文件</h4>
+    <button onclick="testJS()">测试JS文件</button>
+    <div id="jsResult"></div>
+    
+    <h4>3. 修复方案</h4>
+    <button onclick="applyFix()">应用修复</button>
+    <div id="fixResult"></div>
+    
+    <script>
+        function updateStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+        
+        async function testAPI() {
+            const result = document.getElementById('apiResult');
+            result.innerHTML = '<div class="loading"></div> 测试中...';
+            
+            try {
+                const response = await fetch('/api/workflows');
+                const data = await response.json();
+                
+                if (data.success) {
+                    result.innerHTML = `<div class="status success">✅ API正常，工作流数量: ${data.workflows?.length || 0}</div>`;
+                } else {
+                    result.innerHTML = `<div class="status error">❌ API返回错误: ${data.error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="status error">❌ API连接失败: ${error.message}</div>`;
+            }
+        }
+        
+        async function testJS() {
+            const result = document.getElementById('jsResult');
+            result.innerHTML = '<div class="loading"></div> 测试中...';
+            
+            const files = [
+                '/static/js/prompt-shortcuts.js',
+                '/static/js/prompt-composer.js',
+                '/static/js/prompt-optimizer.js',
+                '/static/js/app.js'
+            ];
+            
+            let successCount = 0;
+            let errorCount = 0;
+            
+            for (const file of files) {
+                try {
+                    const response = await fetch(file);
+                    if (response.ok) {
+                        successCount++;
+                    } else {
+                        errorCount++;
+                    }
+                } catch (error) {
+                    errorCount++;
+                }
+            }
+            
+            if (errorCount === 0) {
+                result.innerHTML = `<div class="status success">✅ 所有JS文件正常 (${successCount}/${files.length})</div>`;
+            } else {
+                result.innerHTML = `<div class="status error">❌ JS文件有问题 (成功: ${successCount}, 失败: ${errorCount})</div>`;
+            }
+        }
+        
+        function applyFix() {
+            const result = document.getElementById('fixResult');
+            result.innerHTML = '<div class="loading"></div> 应用修复中...';
+            
+            // 创建修复后的index.html内容
+            const fixedHTML = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ComfyUI工作流管理器</title>
+    <link rel="stylesheet" href="/static/css/style.css?v=${Date.now()}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- 头部 -->
+        <header class="header">
+            <div class="container">
+                <h1 class="title">
+                    <i class="fas fa-robot"></i>
+                    ComfyUI 工作流管理器
+                </h1>
+                <div class="header-actions">
+                    <a href="/gallery" class="btn btn-secondary" style="margin-right: 10px;">
+                        <i class="fas fa-images"></i>
+                        图片画廊
+                    </a>
+                    <a href="/prompt-manager" class="btn btn-secondary" style="margin-right: 10px;">
+                        <i class="fas fa-magic"></i>
+                        提示词库
+                    </a>
+                    <div class="status-indicator" id="serverStatus">
+                        <span class="status-dot"></span>
+                        <span class="status-text">连接中...</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- 主要内容 -->
+        <main class="main">
+            <div class="container">
+                <!-- 加载状态 -->
+                <div id="loadingState" class="loading-state">
+                    <div class="spinner"></div>
+                    <p>正在加载工作流...</p>
+                </div>
+
+                <!-- 错误状态 -->
+                <div id="errorState" class="error-state" style="display: none;">
+                    <div class="error-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <h3>加载失败</h3>
+                    <p id="errorMessage">无法加载工作流列表</p>
+                    <button class="btn btn-primary" onclick="location.reload()">
+                        <i class="fas fa-redo"></i>
+                        重试
+                    </button>
+                </div>
+
+                <!-- 工作流选择页面 -->
+                <div id="workflowSelectionPage" class="workflow-selection-page" style="display: none;">
+                    <div class="page-header">
+                        <h2>ComfyUI 工作流管理器</h2>
+                        <p>选择工作流开始您的AI图像生成之旅</p>
+                    </div>
+                    
+                    <!-- 快速选择区域 -->
+                    <div class="quick-select">
+                        <div class="select-group">
+                            <div style="font-size:11px;color:var(--text-secondary);opacity:.8;">
+                                小贴士：不会写提示词也可用。选择一个工作流后，直接填写"正面提示词"，其他参数保持默认即可出图。
+                            </div>
+                            <label for="workflowSelect">选择工作流：</label>
+                            <select id="workflowSelect">
+                                <option value="">请选择工作流...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- 工作流卡片容器 -->
+                    <div id="workflowCards" class="workflow-cards">
+                        <!-- 工作流卡片将在这里动态生成 -->
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 修复后的JavaScript加载 -->
+    <script>
+        // 简化的应用类
+        class SimpleComfyApp {
+            constructor() {
+                this.workflows = [];
+                this.init();
+            }
+            
+            async init() {
+                try {
+                    await this.loadWorkflows();
+                } catch (error) {
+                    console.error('初始化失败:', error);
+                    this.showError('初始化失败: ' + error.message);
+                }
+            }
+            
+            async loadWorkflows() {
+                this.showLoading();
+                
+                try {
+                    const response = await fetch('/api/workflows');
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    
+                    const data = await response.json();
+                    if (data.success) {
+                        this.workflows = data.workflows || [];
+                        this.renderWorkflows();
+                        this.populateWorkflowSelect();
+                        this.showPage('selection');
+                        this.updateServerStatus();
+                    } else {
+                        throw new Error(data.error || '加载失败');
+                    }
+                } catch (error) {
+                    console.error('加载工作流失败:', error);
+                    this.showError('加载失败: ' + error.message);
+                }
+            }
+            
+            renderWorkflows() {
+                const container = document.getElementById('workflowCards');
+                if (!container) return;
+                
+                if (this.workflows.length === 0) {
+                    container.innerHTML = '<div class="empty-state">没有找到工作流</div>';
+                    return;
+                }
+                
+                container.innerHTML = this.workflows.map(workflow => `
+                    <div class="workflow-card" onclick="app.selectWorkflow('${workflow.filename}')">
+                        <div class="workflow-header">
+                            <h3 class="workflow-name">${workflow.name}</h3>
+                            <span class="workflow-badge">${workflow.node_count} 节点</span>
+                        </div>
+                        <div class="workflow-description">${workflow.description}</div>
+                        <div class="workflow-actions">
+                            <button class="btn btn-primary">配置参数</button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+            
+            populateWorkflowSelect() {
+                const select = document.getElementById('workflowSelect');
+                if (!select) return;
+                
+                select.innerHTML = '<option value="">请选择工作流...</option>';
+                this.workflows.forEach(workflow => {
+                    const option = document.createElement('option');
+                    option.value = workflow.filename;
+                    option.textContent = workflow.name;
+                    select.appendChild(option);
+                });
+            }
+            
+            selectWorkflow(filename) {
+                alert('选择了工作流: ' + filename);
+                // 这里可以添加跳转到配置页面的逻辑
+            }
+            
+            showLoading() {
+                document.getElementById('loadingState').style.display = 'block';
+                document.getElementById('errorState').style.display = 'none';
+                document.getElementById('workflowSelectionPage').style.display = 'none';
+            }
+            
+            showError(message) {
+                document.getElementById('errorMessage').textContent = message;
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('errorState').style.display = 'block';
+                document.getElementById('workflowSelectionPage').style.display = 'none';
+            }
+            
+            showPage(pageName) {
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('errorState').style.display = 'none';
+                document.getElementById('workflowSelectionPage').style.display = 'block';
+            }
+            
+            async updateServerStatus() {
+                try {
+                    const response = await fetch('/api/comfyui/status');
+                    const data = await response.json();
+                    const statusText = document.querySelector('#serverStatus .status-text');
+                    if (statusText) {
+                        statusText.textContent = data.connected ? '服务正常' : 'ComfyUI未连接';
+                    }
+                } catch (error) {
+                    console.error('更新服务器状态失败:', error);
+                }
+            }
+        }
+        
+        // 初始化应用
+        let app;
+        document.addEventListener('DOMContentLoaded', () => {
+            app = new SimpleComfyApp();
+        });
+    </script>
+</body>
+</html>`;
+            
+            // 创建下载链接
+            const blob = new Blob([fixedHTML], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'index_fixed.html';
+            a.textContent = '下载修复后的index.html';
+            
+            result.innerHTML = `
+                <div class="status success">
+                    ✅ 修复完成！<br>
+                    <a href="${url}" download="index_fixed.html" class="btn btn-primary">下载修复后的文件</a><br>
+                    <small>请将此文件替换 templates/index.html</small>
+                </div>
+            `;
+        }
+        
+        // 页面加载完成
+        window.addEventListener('load', () => {
+            updateStatus('修复工具已准备就绪', 'info');
+        });
+    </script>
+</body>
+</html>
+

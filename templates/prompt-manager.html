@@ -117,6 +117,24 @@
             margin-bottom: 15px;
         }
 
+        .badge-list {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin: 6px 0 0 0;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 999px;
+        }
+
         .prompt-text {
             background: var(--bg-primary);
             border: 1px solid var(--border-color);
@@ -154,17 +172,28 @@
             flex: 1;
             padding: 12px;
             border: 1px solid var(--border-color);
-            border-radius: 8px;
-            background: var(--bg-primary);
+            border-radius: var(--border-radius);
+            background: var(--bg-color);
             color: var(--text-primary);
+            font-size: 14px;
+            transition: var(--transition);
         }
 
         .filter-select {
             padding: 12px;
             border: 1px solid var(--border-color);
-            border-radius: 8px;
-            background: var(--bg-primary);
+            border-radius: var(--border-radius);
+            background: var(--bg-color);
             color: var(--text-primary);
+            font-size: 14px;
+            transition: var(--transition);
+        }
+
+        .search-input:focus,
+        .filter-select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
         }
 
         .stats-grid {
@@ -289,6 +318,19 @@
             <button class="tab-btn" onclick="switchTab('recent')">最近使用</button>
             <button class="tab-btn" onclick="switchTab('popular')">热门提示词</button>
         </div>
+        <div class="manager-actions" style="display:flex; gap:8px; margin: 8px 0 16px 0;">
+            <button class="btn btn-secondary" onclick="promptManager.openNew()"><i class="fas fa-plus"></i> 新增提示词</button>
+            <button class="btn btn-secondary" onclick="promptManager.openImport()"><i class="fas fa-file-import"></i> 导入</button>
+            <button class="btn btn-secondary" onclick="promptManager.exportCustom()"><i class="fas fa-file-export"></i> 导出自定义</button>
+            <button class="btn btn-secondary" onclick="promptManager.exportAll()"><i class="fas fa-download"></i> 导出全部</button>
+            <button class="btn btn-secondary" onclick="promptManager.openManage()"><i class="fas fa-sliders-h"></i> 管理分类与徽章</button>
+            <div style="flex:1"></div>
+            <div class="btn-group" style="display:flex; gap:6px;">
+                <button class="btn btn-secondary" onclick="promptManager.openDeduplicate()"><i class="fas fa-compress-arrows-alt"></i> 去重</button>
+                <button class="btn btn-secondary" onclick="promptManager.openMergeSameName()"><i class="fas fa-layer-group"></i> 同名合并</button>
+                <button class="btn btn-secondary" onclick="promptManager.openBatchRename()"><i class="fas fa-i-cursor"></i> 批量重命名</button>
+            </div>
+        </div>
 
         <!-- 搜索和筛选 -->
         <div class="search-bar">
@@ -314,7 +356,7 @@
 
         <!-- 标签页内容 -->
         <div id="allTab" class="tab-content active">
-            <div class="prompt-grid" id="allPromptsGrid"></div>
+            <div class="prompt-grid" id="allGrid"></div>
         </div>
 
         <div id="favoritesTab" class="tab-content">
@@ -334,18 +376,29 @@
     <script>
         class PromptManager {
             constructor() {
-                this.promptSystem = new PromptShortcutSystem();
+                this.promptSystem = null;
                 this.currentTab = 'all';
                 this.allPrompts = [];
                 this.filteredPrompts = [];
+                this.customKey = 'cw_prompt_custom';
+                this.editingIndex = -1; // index within custom list
+                this.selectedLabels = new Set();
+                this.lastUndoAction = null; // { type: 'delete', label, snapshot }
                 this.init();
             }
 
             init() {
-                this.loadAllPrompts();
-                this.setupEventListeners();
-                this.updateStats();
-                this.loadRecommendations();
+                // 确保 PromptShortcutSystem 已加载
+                if (typeof PromptShortcutSystem !== 'undefined') {
+                    this.promptSystem = new PromptShortcutSystem();
+                    this.loadAllPrompts();
+                    this.setupEventListeners();
+                    this.updateStats();
+                    this.loadRecommendations();
+                } else {
+                    // 如果还没加载，等待一下再试
+                    setTimeout(() => this.init(), 100);
+                }
             }
 
             setupEventListeners() {
@@ -358,34 +411,71 @@
                 modelFilter.addEventListener('change', () => this.filterPrompts());
             }
 
+            // ========== 本地自定义库 CRUD 存取 ==========
+            loadCustomList() {
+                try { return JSON.parse(localStorage.getItem(this.customKey) || '[]'); } catch (_) { return []; }
+            }
+            saveCustomList(list) {
+                try { localStorage.setItem(this.customKey, JSON.stringify(list || [])); } catch (_) {}
+            }
+
+            // 查询与合并时需要应用“删除标记”
+            getEffectiveCustomList() {
+                const list = this.loadCustomList();
+                // 过滤掉 tombstone
+                return list.filter(x => !x._deleted);
+            }
+
+            // 合并系统分组与自定义分组
             loadAllPrompts() {
                 // 模拟加载所有提示词
                 this.allPrompts = this.generateAllPrompts();
+                // 附加自定义（包含覆盖的系统项）
+                const custom = this.getEffectiveCustomList();
+                custom.forEach(item => {
+                    this.allPrompts.unshift({
+                        label: item.label || '未命名',
+                        prompt: item.prompt || '',
+                        negative: item.negative || '',
+                        category: item.category || (item._source || '自定义'),
+                        badges: item.badges || [item._source || '自定义'],
+                        usageCount: item.usageCount || 0
+                    });
+                });
                 this.filteredPrompts = [...this.allPrompts];
                 this.renderPrompts();
+                this.updateBulkBar();
             }
 
             generateAllPrompts() {
                 const prompts = [];
-                
-                // 从PromptShortcutSystem获取提示词
-                const groups = this.promptSystem.buildPromptShortcutGroups({
-                    isFlux: true,
-                    isTxt2Img: true,
-                    isImg2Img: false
-                });
 
-                groups.forEach(group => {
-                    group.items.forEach(item => {
-                        prompts.push({
-                            ...item,
-                            category: group.title,
-                            badges: group.badges || [],
-                            usageCount: Math.floor(Math.random() * 100), // 模拟使用次数
-                            lastUsed: Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000 // 模拟最后使用时间
+                // 从 PromptShortcutSystem 获取提示词，并用真实使用统计替代随机值
+                if (this.promptSystem) {
+                    const groups = this.promptSystem.buildPromptShortcutGroups({
+                        isFlux: true,
+                        isTxt2Img: true,
+                        isImg2Img: false
+                    });
+
+                    const usageStore = (typeof this.promptSystem.getShortcutUsageStore === 'function')
+                        ? (this.promptSystem.getShortcutUsageStore() || {})
+                        : {};
+
+                    groups.forEach(group => {
+                        (group.items || []).forEach(item => {
+                            const key = `${item.label}|${(item.prompt || '').slice(0,200)}`;
+                            const stat = usageStore[key] || {};
+                            prompts.push({
+                                ...item,
+                                category: group.title,
+                                badges: group.badges || [],
+                                usageCount: stat.count || 0,
+                                lastUsed: stat.lastTs || 0
+                            });
                         });
                     });
-                });
+                }
 
                 return prompts;
             }
@@ -395,17 +485,49 @@
                 const categoryFilter = document.getElementById('categoryFilter').value;
                 const modelFilter = document.getElementById('modelFilter').value;
 
-                this.filteredPrompts = this.allPrompts.filter(prompt => {
-                    const matchesSearch = !searchTerm || 
-                        prompt.label.toLowerCase().includes(searchTerm) ||
-                        prompt.prompt.toLowerCase().includes(searchTerm);
-                    
-                    const matchesCategory = !categoryFilter || 
-                        prompt.category.includes(categoryFilter);
-                    
-                    const matchesModel = !modelFilter || 
-                        prompt.badges.includes(modelFilter);
+                // 根据当前标签页选择数据源
+                let dataset = [];
+                if (this.currentTab === 'favorites') {
+                    dataset = (this.promptSystem && this.promptSystem.favorites ? this.promptSystem.favorites : []).map(f => ({
+                        label: f.label,
+                        prompt: f.prompt,
+                        category: f.category || '收藏',
+                        badges: ['收藏'],
+                        usageCount: 0
+                    }));
+                } else if (this.currentTab === 'recent' || this.currentTab === 'popular') {
+                    const store = this.promptSystem && this.promptSystem.getShortcutUsageStore ? this.promptSystem.getShortcutUsageStore() : {};
+                    const items = Object.values(store || {});
+                    if (this.currentTab === 'recent') {
+                        items.sort((a,b)=> (b.lastTs||0) - (a.lastTs||0));
+                    } else {
+                        items.sort((a,b)=> (b.count||0) - (a.count||0));
+                    }
+                    dataset = items.map(x => {
+                        const typeKey = String(x.typeKey || '');
+                        const isFlux = typeKey.startsWith('flux');
+                        const mode = typeKey.includes('img2img') ? 'img2img' : (typeKey.includes('txt2img') ? 'txt2img' : 'other');
+                        const badges = [isFlux ? 'Flux' : '传统'].concat(mode !== 'other' ? [mode] : []);
+                        return {
+                            label: x.label,
+                            prompt: x.prompt,
+                            category: '历史',
+                            badges,
+                            usageCount: x.count || 0
+                        };
+                    });
+                } else {
+                    dataset = [...this.allPrompts];
+                }
 
+                this.filteredPrompts = dataset.filter(prompt => {
+                    const matchesSearch = !searchTerm || 
+                        (prompt.label || '').toLowerCase().includes(searchTerm) ||
+                        (prompt.prompt || '').toLowerCase().includes(searchTerm);
+                    const matchesCategory = !categoryFilter || 
+                        (prompt.category || '').includes(categoryFilter);
+                    const matchesModel = !modelFilter || 
+                        (prompt.badges || []).includes(modelFilter);
                     return matchesSearch && matchesCategory && matchesModel;
                 });
 
@@ -430,30 +552,43 @@
             }
 
             createPromptCard(prompt) {
-                const isFavorite = this.promptSystem.favorites.find(f => 
+                const isFavorite = this.promptSystem && this.promptSystem.favorites ? this.promptSystem.favorites.find(f => 
                     f.key === `${prompt.label}|${(prompt.prompt || '').slice(0,200)}`
-                );
+                ) : false;
+                const badges = Array.isArray(prompt.badges) ? prompt.badges : [];
+                const badgesHtml = badges.length ? `<div class=\"badge-list\">${badges.map(b => `<span class=\"badge\">${b}</span>`).join('')}</div>` : '';
+                const labelEnc = encodeURIComponent(prompt.label || '');
+                const hasOverride = this._findCustomIndexByLabel(prompt.label || '') >= 0;
+                const checked = this.selectedLabels.has(prompt.label || '') ? 'checked' : '';
 
                 return `
-                    <div class="prompt-card">
-                        <div class="card-header">
-                            <h3 class="card-title">${prompt.label}</h3>
-                            <div class="card-actions">
-                                <button class="action-btn favorite-btn ${isFavorite ? 'active' : ''}" 
-                                        onclick="promptManager.toggleFavorite('${prompt.label}')">
-                                    <i class="fas fa-heart"></i>
+                    <div class=\"prompt-card\">
+                        <div class=\"card-header\">
+                            <h3 class=\"card-title\">${prompt.label}</h3>
+                            <div class=\"card-actions\">
+                                <input type=\"checkbox\" class=\"select-checkbox\" ${checked} onclick=\"promptManager.toggleSelect('${labelEnc}', this.checked)\" title=\"选择\" />
+                                <button class=\"action-btn favorite-btn ${isFavorite ? 'active' : ''}\" 
+                                        onclick=\"promptManager.toggleFavorite('${prompt.label}')\">
+                                    <i class=\"fas fa-heart\"></i>
                                 </button>
-                                <button class="action-btn copy-btn" onclick="promptManager.copyPrompt('${prompt.prompt}')">
-                                    <i class="fas fa-copy"></i>
+                                <button class=\"action-btn copy-btn\" onclick=\"promptManager.copyPrompt('${encodeURIComponent(prompt.prompt)}')\">
+                                    <i class=\"fas fa-copy\"></i>
                                 </button>
+                                <button class=\"action-btn\" title=\"应用到主界面\" onclick=\"promptManager.applyToMain('${labelEnc}','${encodeURIComponent(prompt.prompt)}','${encodeURIComponent(prompt.negative || '')}')\">
+                                    <i class=\"fas fa-paper-plane\"></i>
+                                </button>
+                                <button class=\"action-btn\" title=\"编辑\" onclick=\"promptManager.editByLabel('${labelEnc}')\"><i class=\"fas fa-edit\"></i></button>
+                                <button class=\"action-btn\" title=\"删除\" onclick=\"promptManager.deleteByLabel('${labelEnc}')\"><i class=\"fas fa-trash\"></i></button>
+                                ${hasOverride ? `<button class=\"action-btn\" title=\"还原默认\" onclick=\"promptManager.restoreDefault('${labelEnc}')\"><i class=\"fas fa-rotate-left\"></i></button>` : ''}
                             </div>
                         </div>
-                        <div class="card-content">
-                            <div class="prompt-text">${prompt.prompt}</div>
+                        ${badgesHtml}
+                        <div class=\"card-content\">
+                            <div class=\"prompt-text\">${prompt.prompt}</div>
                         </div>
-                        <div class="card-footer">
-                            <div class="usage-count">
-                                <i class="fas fa-chart-line"></i>
+                        <div class=\"card-footer\">
+                            <div class=\"usage-count\">
+                                <i class=\"fas fa-chart-line\"></i>
                                 ${prompt.usageCount} 次使用
                             </div>
                             <div>${prompt.category}</div>
@@ -464,7 +599,7 @@
 
             toggleFavorite(label) {
                 const prompt = this.allPrompts.find(p => p.label === label);
-                if (prompt) {
+                if (prompt && this.promptSystem) {
                     const isAdded = this.promptSystem.toggleFavorite(prompt);
                     this.renderPrompts();
                     this.updateStats();
@@ -475,28 +610,58 @@
                 }
             }
 
-            copyPrompt(prompt) {
+            copyPrompt(promptEncoded) {
+                const prompt = decodeURIComponent(promptEncoded);
                 navigator.clipboard.writeText(prompt).then(() => {
                     this.showNotification('提示词已复制到剪贴板');
                 });
             }
 
+            applyToMain(labelEncoded, promptEncoded, negativeEncoded) {
+                try {
+                    const label = this._decode(labelEncoded);
+                    const prompt = decodeURIComponent(promptEncoded);
+                    const negative = decodeURIComponent(negativeEncoded || '');
+
+                    // 记录使用统计
+                    try {
+                        if (this.promptSystem && typeof this.promptSystem.recordShortcutUsage === 'function') {
+                            this.promptSystem.recordShortcutUsage({ label, prompt, negative });
+                        }
+                    } catch (_) {}
+
+                    // 跳转并回填正/负面提示词
+                    const url = new URL('/', window.location.origin);
+                    // 优先携带最近工作流，便于直接进入配置页
+                    try {
+                        const lastWf = localStorage.getItem('cw_last_workflow');
+                        if (lastWf) url.searchParams.set('workflow', lastWf);
+                    } catch (_) {}
+                    url.searchParams.set('from', 'prompt-manager');
+                    url.searchParams.set('positive', prompt);
+                    if (negative) url.searchParams.set('negative', negative);
+                    window.location.href = url.toString();
+                } catch (e) {}
+            }
+
             updateStats() {
                 document.getElementById('totalPrompts').textContent = this.allPrompts.length;
-                document.getElementById('favoriteCount').textContent = this.promptSystem.favorites.length;
+                document.getElementById('favoriteCount').textContent = this.promptSystem ? this.promptSystem.favorites.length : 0;
                 document.getElementById('usageCount').textContent = this.allPrompts.reduce((sum, p) => sum + p.usageCount, 0);
                 document.getElementById('categoriesCount').textContent = new Set(this.allPrompts.map(p => p.category)).size;
             }
 
             loadRecommendations() {
-                const recommendations = this.promptSystem.getRecommendedPrompts(8);
-                if (recommendations.length > 0) {
-                    document.getElementById('recommendationSection').style.display = 'block';
-                    document.getElementById('recommendationList').innerHTML = recommendations.map(rec => `
-                        <div class="recommendation-item" onclick="promptManager.copyPrompt('${rec.prompt}')">
-                            ${rec.label} (${rec.count}次)
-                        </div>
-                    `).join('');
+                if (this.promptSystem) {
+                    const recommendations = this.promptSystem.getRecommendedPrompts(8);
+                    if (recommendations.length > 0) {
+                        document.getElementById('recommendationSection').style.display = 'block';
+                        document.getElementById('recommendationList').innerHTML = recommendations.map(rec => `
+                            <div class=\"recommendation-item\" onclick=\"promptManager.copyPrompt('${encodeURIComponent(rec.prompt)}')\">
+                                ${rec.label} (${rec.count}次)
+                            </div>
+                        `).join('');
+                    }
                 }
             }
 
@@ -521,6 +686,607 @@
                     notification.remove();
                 }, 3000);
             }
+            showActionNotification(message, undoHandler) {
+                const box = document.createElement('div');
+                box.style.cssText = `position: fixed; top: 20px; right: 20px; background: var(--card-bg); color: var(--text-primary); border:1px solid var(--border-color); padding: 10px 14px; border-radius: 8px; z-index: 1000; box-shadow: var(--shadow);`;
+                box.innerHTML = `<span>${message}</span> <a href=\"#\" style=\"margin-left:8px; color: var(--primary-color);\">撤销</a>`;
+                const link = box.querySelector('a');
+                link.addEventListener('click', (e) => { e.preventDefault(); try { undoHandler && undoHandler(); } catch(_){}; box.remove(); });
+                document.body.appendChild(box);
+                setTimeout(() => { try { box.remove(); } catch(_){} }, 5000);
+            }
+
+            // ========== 新增/编辑 ========== 
+            openNew() {
+                this.editingIndex = -1;
+                this.openEditModal({ label: '', prompt: '', negative: '', category: '自定义', badges: ['自定义'] });
+            }
+            openEditModal(item) {
+                const modal = this.ensureEditModal();
+                modal.querySelector('#pm_label').value = item.label || '';
+                modal.querySelector('#pm_prompt').value = item.prompt || '';
+                modal.querySelector('#pm_negative').value = item.negative || '';
+                // 填充下拉项
+                const meta = this.loadManageData();
+                const cats = Array.isArray(meta.categories) && meta.categories.length ? meta.categories : ['摄影类','艺术创作','创意场景','质量优化','人物角色','室内场景','户外场景','自定义'];
+                const badges = Array.isArray(meta.badges) && meta.badges.length ? meta.badges : ['Flux','传统','txt2img','img2img','inpaint','outpaint','remove','controlnet','upscaler','redux','kontext','自定义'];
+                const catSel = modal.querySelector('#pm_category');
+                catSel.innerHTML = cats.map(c => `<option value=\"${c}\">${c}</option>`).join('');
+                catSel.value = item.category && cats.includes(item.category) ? item.category : '自定义';
+                const badgeSel = modal.querySelector('#pm_badges');
+                badgeSel.innerHTML = badges.map(b => `<option value=\"${b}\">${b}</option>`).join('');
+                const selectedBadges = item.badges || ['自定义'];
+                Array.from(badgeSel.options).forEach(opt => { opt.selected = selectedBadges.includes(opt.value); });
+                modal.style.display = 'block';
+            }
+            closeEditModal() {
+                const modal = document.getElementById('pm_edit_modal');
+                if (modal) modal.style.display = 'none';
+            }
+            saveEdit() {
+                const modal = document.getElementById('pm_edit_modal');
+                if (!modal) return;
+                const label = modal.querySelector('#pm_label').value.trim();
+                const prompt = modal.querySelector('#pm_prompt').value.trim();
+                const negative = modal.querySelector('#pm_negative').value.trim();
+                const category = modal.querySelector('#pm_category').value.trim() || '自定义';
+                const badges = Array.from(modal.querySelector('#pm_badges').selectedOptions).map(o=>o.value);
+                if (!label || !prompt) { alert('名称与提示词内容不能为空'); return; }
+                const list = this.loadCustomList();
+                const payload = { label, prompt, negative, category, badges, _source: category || '自定义' };
+                if (this.editingIndex >= 0 && this.editingIndex < list.length) {
+                    list[this.editingIndex] = payload;
+                } else {
+                    // 若存在同名系统项，视为覆盖（shadow edit）
+                    const existingIdx = list.findIndex(x => x.label === label);
+                    if (existingIdx >= 0) list[existingIdx] = payload; else list.unshift(payload);
+                }
+                this.saveCustomList(list);
+                this.closeEditModal();
+                this.loadAllPrompts();
+                this.showNotification('已保存');
+            }
+            _decode(val) { try { return decodeURIComponent(val); } catch (_) { return val; } }
+            _findCustomIndexByLabel(label) {
+                const list = this.loadCustomList();
+                return list.findIndex(x => x.label === label);
+            }
+            // 任意卡片编辑：若非自定义，创建覆盖副本后编辑
+            editByLabel(labelEncoded) {
+                const label = this._decode(labelEncoded);
+                const list = this.loadCustomList();
+                const idx = this._findCustomIndexByLabel(label);
+                if (idx >= 0) {
+                    this.editingIndex = idx;
+                    this.openEditModal(list[idx] || {});
+                } else {
+                    // 从当前展示里取原始项，生成可编辑副本
+                    const base = (this.allPrompts || []).find(p => p.label === label) || { label, prompt: '', negative: '', category: '系统', badges: ['系统'] };
+                    this.editingIndex = -1;
+                    this.openEditModal({ label: base.label, prompt: base.prompt, negative: base.negative || '', category: base.category || '系统', badges: base.badges || ['系统'] });
+                }
+            }
+
+            // 删除：若是系统项，则写入 tombstone（_deleted=true）；若是自定义则移除
+            deleteByLabel(label) {
+                const name = this._decode(label);
+                const list = this.loadCustomList();
+                const idx = this._findCustomIndexByLabel(name);
+                if (confirm('确定删除该提示词？')) {
+                    if (idx >= 0) {
+                        const snapshot = { item: { ...list[idx] }, index: idx };
+                        // 删除自定义
+                        list.splice(idx, 1);
+                        this.lastUndoAction = { type: 'delete', label: name, snapshot };
+                    } else {
+                        // 系统项：写入墓碑隐藏
+                        const tomb = { label: name, prompt: '', negative: '', category: '系统', badges: ['系统'], _deleted: true, _source: '系统' };
+                        list.unshift(tomb);
+                        this.lastUndoAction = { type: 'delete_tomb', label: name };
+                    }
+                    this.saveCustomList(list);
+                    this.loadAllPrompts();
+                    this.showActionNotification('已删除', () => this.undoLastAction());
+                }
+            }
+            undoLastAction() {
+                const act = this.lastUndoAction;
+                this.lastUndoAction = null;
+                if (!act) return;
+                if (act.type === 'delete') {
+                    const l = this.loadCustomList();
+                    if (act.snapshot.index <= l.length) l.splice(act.snapshot.index, 0, act.snapshot.item); else l.push(act.snapshot.item);
+                    this.saveCustomList(l);
+                } else if (act.type === 'delete_tomb') {
+                    const l = this.loadCustomList();
+                    const i = l.findIndex(x => x.label === act.label && x._deleted);
+                    if (i >= 0) { l.splice(i, 1); this.saveCustomList(l); }
+                }
+                this.loadAllPrompts();
+                this.showNotification('已撤销');
+            }
+
+            // ========== 导入/导出 ==========
+            openImport() {
+                const modal = this.ensureImportModal();
+                modal.querySelector('#pm_import_text').value = '';
+                modal.style.display = 'block';
+            }
+            closeImport() {
+                const modal = document.getElementById('pm_import_modal');
+                if (modal) modal.style.display = 'none';
+            }
+            doImport() {
+                const modal = document.getElementById('pm_import_modal');
+                if (!modal) return;
+                const text = modal.querySelector('#pm_import_text').value.trim();
+                if (!text) { alert('请粘贴JSON数组或换行分隔的提示词'); return; }
+                let items = [];
+                try {
+                    const parsed = JSON.parse(text);
+                    if (Array.isArray(parsed)) {
+                        const errors = [];
+                        parsed.forEach((x, i) => {
+                            if (!x || !(x.prompt || x.label)) {
+                                errors.push(`第 ${i+1} 条缺少 label/prompt`);
+                                return;
+                            }
+                            items.push({
+                                label: x.label || (x.prompt || '').slice(0,30) || '未命名',
+                                prompt: x.prompt || '',
+                                negative: x.negative || '',
+                                category: x.category || '自定义',
+                                badges: x.badges || ['自定义']
+                            });
+                        });
+                        if (errors.length) alert('导入告警:\n' + errors.join('\n'));
+                    }
+                } catch (e) {
+                    // 尝试按行解析
+                    if (e && e.message) alert('JSON 解析失败: ' + e.message + '\n将尝试逐行导入');
+                    items = text.split(/\n+/).map(s => s.trim()).filter(Boolean).map(s => ({
+                        label: s.slice(0,30),
+                        prompt: s,
+                        negative: '',
+                        category: '自定义',
+                        badges: ['自定义']
+                    }));
+                }
+                if (items.length === 0) { alert('未检测到有效内容'); return; }
+                const list = this.loadCustomList();
+                this.saveCustomList([ ...items, ...list ]);
+                this.closeImport();
+                this.loadAllPrompts();
+                this.showNotification(`已导入 ${items.length} 条`);
+            }
+            exportCustom() {
+                const list = this.loadCustomList();
+                const payload = { schemaVersion: 1, exportedAt: new Date().toISOString(), items: list };
+                this._downloadJson(payload, 'prompt_custom.json');
+            }
+
+            // 导出当前所有（合并后的）
+            exportAll() {
+                const data = (this.filteredPrompts && this.filteredPrompts.length ? this.filteredPrompts : this.allPrompts) || [];
+                const exportData = data.map(p => ({ label: p.label, prompt: p.prompt, negative: p.negative || '', category: p.category || '', badges: p.badges || [] }));
+                this._downloadJson({ schemaVersion: 1, exportedAt: new Date().toISOString(), items: exportData }, 'prompt_all.json');
+            }
+            _downloadJson(obj, filename) {
+                const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+            }
+
+            // ========== 动态创建模态框 ==========
+            ensureEditModal() {
+                let modal = document.getElementById('pm_edit_modal');
+                if (modal) return modal;
+                const html = `
+                <div id="pm_edit_modal" class="modal" style="display:none;">
+                  <div class="modal-content" style="max-width:720px;">
+                    <div class="modal-header">
+                      <h3>编辑提示词</h3>
+                      <button class="btn btn-sm btn-secondary" onclick="promptManager.closeEditModal()"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="modal-body" style="display:flex; flex-direction:column; gap:10px;">
+                      <div class="form-group"><label>名称</label><input id="pm_label" type="text" placeholder="请输入名称"></div>
+                      <div class="form-group"><label>正面提示词</label><textarea id="pm_prompt" rows="4" placeholder="请输入提示词"></textarea></div>
+                      <div class="form-group"><label>负面提示词</label><textarea id="pm_negative" rows="3" placeholder="可选"></textarea></div>
+                      <div class="form-group"><label>分类</label>
+                        <select id="pm_category"></select>
+                      </div>
+                      <div class="form-group"><label>徽章（多选）</label>
+                        <select id="pm_badges" multiple size="5"></select>
+                        <div class="form-hint">按住 Ctrl/Command 可多选</div>
+                      </div>
+                    </div>
+                    <div class="modal-footer" style="display:flex; gap:8px; justify-content:flex-end;">
+                      <button class="btn btn-secondary" onclick="promptManager.closeEditModal()">取消</button>
+                      <button class="btn btn-primary" onclick="promptManager.saveEdit()">保存</button>
+                    </div>
+                  </div>
+                </div>`;
+                document.body.insertAdjacentHTML('beforeend', html);
+                return document.getElementById('pm_edit_modal');
+            }
+
+            ensureImportModal() {
+                let modal = document.getElementById('pm_import_modal');
+                if (modal) return modal;
+                const html = `
+                <div id=\"pm_import_modal\" class=\"modal\" style=\"display:none;\">
+                  <div class=\"modal-content\" style=\"max-width:720px;\">
+                    <div class=\"modal-header\">
+                      <h3>导入提示词</h3>
+                      <button class=\"btn btn-sm btn-secondary\" onclick=\"promptManager.closeImport()\"><i class=\"fas fa-times\"></i></button>
+                    </div>
+                    <div class=\"modal-body\" style=\"display:flex; flex-direction:column; gap:10px;\">
+                      <div class=\"form-group\"><label>粘贴 JSON 数组 或 换行分隔的提示词</label><textarea id=\"pm_import_text\" rows=\"10\" placeholder=\"[ { \\\"label\\\":\\\"\\\", \\\"prompt\\\":\\\"\\\" } ] 或逐行提示词\"></textarea></div>
+                    </div>
+                    <div class=\"modal-footer\" style=\"display:flex; gap:8px; justify-content:flex-end;\">
+                      <button class=\"btn btn-secondary\" onclick=\"promptManager.closeImport()\">取消</button>
+                      <button class=\"btn btn-primary\" onclick=\"promptManager.doImport()\">导入</button>
+                    </div>
+                  </div>
+                </div>`;
+                document.body.insertAdjacentHTML('beforeend', html);
+                return document.getElementById('pm_import_modal');
+            }
+
+            // ======= 批处理：去重 / 合并 / 批量重命名 =======
+            openDeduplicate() {
+                const modal = this.ensureDedupModal();
+                const stats = this._analyzeDuplicates();
+                modal.querySelector('#pm_dedup_stats').textContent = `检测到重复键 ${stats.duplicates} 项（基于 label+prompt 前200字符）`;
+                modal.style.display = 'block';
+            }
+            doDeduplicate() {
+                const list = this.loadCustomList();
+                const seen = new Set();
+                const out = [];
+                list.forEach(x => {
+                    const key = `${x.label}|${(x.prompt||'').slice(0,200)}`;
+                    if (!seen.has(key)) { seen.add(key); out.push(x); }
+                });
+                this.saveCustomList(out);
+                this.closeDedup();
+                this.loadAllPrompts();
+                this.showNotification(`已去重 ${list.length - out.length} 项`);
+            }
+            closeDedup() { const m = document.getElementById('pm_dedup_modal'); if (m) m.style.display = 'none'; }
+            ensureDedupModal() {
+                let modal = document.getElementById('pm_dedup_modal');
+                if (modal) return modal;
+                const html = `
+                <div id="pm_dedup_modal" class="modal" style="display:none;">
+                  <div class="modal-content" style="max-width:560px;">
+                    <div class="modal-header">
+                      <h3>去重</h3>
+                      <button class="btn btn-sm btn-secondary" onclick="promptManager.closeDedup()"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="modal-body" style="display:flex; flex-direction:column; gap:10px;">
+                      <div id="pm_dedup_stats">分析中...</div>
+                      <div class="form-hint">基于 key=label|prompt[0..200] 去重，仅作用于“自定义库”。</div>
+                    </div>
+                    <div class="modal-footer" style="display:flex; gap:8px; justify-content:flex-end;">
+                      <button class="btn btn-secondary" onclick="promptManager.closeDedup()">取消</button>
+                      <button class="btn btn-primary" onclick="promptManager.doDeduplicate()">执行去重</button>
+                    </div>
+                  </div>
+                </div>`;
+                document.body.insertAdjacentHTML('beforeend', html);
+                return document.getElementById('pm_dedup_modal');
+            }
+            _analyzeDuplicates() {
+                const list = this.loadCustomList();
+                const seen = new Set();
+                let dup = 0;
+                list.forEach(x => { const k = `${x.label}|${(x.prompt||'').slice(0,200)}`; if (seen.has(k)) dup++; else seen.add(k); });
+                return { duplicates: dup };
+            }
+
+            openMergeSameName() { const m = this.ensureMergeModal(); m.style.display = 'block'; }
+            closeMergeSameName() { const m = document.getElementById('pm_merge_modal'); if (m) m.style.display = 'none'; }
+            doMergeSameName() {
+                const list = this.loadCustomList();
+                const map = new Map();
+                list.forEach(x => {
+                    const key = x.label || '';
+                    if (!map.has(key)) map.set(key, []);
+                    map.get(key).push(x);
+                });
+                const out = [];
+                for (const [label, arr] of map.entries()) {
+                    if (arr.length === 1) { out.push(arr[0]); continue; }
+                    // 合并同名：prompt/negative 去重合并，badges 合并去重，category 取第一个非空
+                    const prompts = Array.from(new Set(arr.map(i => i.prompt || '').filter(Boolean)));
+                    const negatives = Array.from(new Set(arr.map(i => i.negative || '').filter(Boolean)));
+                    const badges = Array.from(new Set([].concat(...arr.map(i => i.badges || []))));
+                    const category = (arr.find(i => i.category) || {}).category || '自定义';
+                    out.push({ label, prompt: prompts.join(' | '), negative: negatives.join(' , '), badges, category, _source: '自定义' });
+                }
+                this.saveCustomList(out);
+                this.closeMergeSameName();
+                this.loadAllPrompts();
+                this.showNotification('同名项已合并');
+            }
+            ensureMergeModal() {
+                let modal = document.getElementById('pm_merge_modal');
+                if (modal) return modal;
+                const html = `
+                <div id="pm_merge_modal" class="modal" style="display:none;">
+                  <div class="modal-content" style="max-width:560px;">
+                    <div class="modal-header">
+                      <h3>同名合并</h3>
+                      <button class="btn btn-sm btn-secondary" onclick="promptManager.closeMergeSameName()"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="modal-body" style="display:flex; flex-direction:column; gap:10px;">
+                      <div class="form-hint">将自定义库中同名的多条记录合并为一条，提示词与负面提示词将去重合并。</div>
+                    </div>
+                    <div class="modal-footer" style="display:flex; gap:8px; justify-content:flex-end;">
+                      <button class="btn btn-secondary" onclick="promptManager.closeMergeSameName()">取消</button>
+                      <button class="btn btn-primary" onclick="promptManager.doMergeSameName()">执行合并</button>
+                    </div>
+                  </div>
+                </div>`;
+                document.body.insertAdjacentHTML('beforeend', html);
+                return document.getElementById('pm_merge_modal');
+            }
+
+            openBatchRename() { const m = this.ensureRenameModal(); m.style.display = 'block'; }
+            closeBatchRename() { const m = document.getElementById('pm_rename_modal'); if (m) m.style.display = 'none'; }
+            doBatchRename() {
+                const modal = document.getElementById('pm_rename_modal');
+                if (!modal) return;
+                const prefix = modal.querySelector('#pm_rename_prefix').value;
+                const suffix = modal.querySelector('#pm_rename_suffix').value;
+                const find = modal.querySelector('#pm_rename_find').value;
+                const replace = modal.querySelector('#pm_rename_replace').value;
+                const list = this.loadCustomList();
+                const out = list.map((x, idx) => {
+                    let label = x.label || '';
+                    if (find) label = label.split(find).join(replace);
+                    label = `${prefix || ''}${label}${suffix || ''}`;
+                    return { ...x, label };
+                });
+                this.saveCustomList(out);
+                this.closeBatchRename();
+                this.loadAllPrompts();
+                this.showNotification('批量重命名完成');
+            }
+            ensureRenameModal() {
+                let modal = document.getElementById('pm_rename_modal');
+                if (modal) return modal;
+                const html = `
+                <div id="pm_rename_modal" class="modal" style="display:none;">
+                  <div class="modal-content" style="max-width:640px;">
+                    <div class="modal-header">
+                      <h3>批量重命名</h3>
+                      <button class="btn btn-sm btn-secondary" onclick="promptManager.closeBatchRename()"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="modal-body" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                      <div class="form-group"><label>前缀</label><input id="pm_rename_prefix" type="text" placeholder="例如：摄影-"/></div>
+                      <div class="form-group"><label>后缀</label><input id="pm_rename_suffix" type="text" placeholder="例如：-Flux"/></div>
+                      <div class="form-group"><label>查找</label><input id="pm_rename_find" type="text" placeholder="要替换的子串"/></div>
+                      <div class="form-group"><label>替换为</label><input id="pm_rename_replace" type="text" placeholder="替换后的子串"/></div>
+                    </div>
+                    <div class="modal-footer" style="display:flex; gap:8px; justify-content:flex-end;">
+                      <button class="btn btn-secondary" onclick="promptManager.closeBatchRename()">取消</button>
+                      <button class="btn btn-primary" onclick="promptManager.doBatchRename()">执行重命名</button>
+                    </div>
+                  </div>
+                </div>`;
+                document.body.insertAdjacentHTML('beforeend', html);
+                return document.getElementById('pm_rename_modal');
+            }
+
+            // 批量操作
+            toggleSelect(labelEncoded, isChecked) {
+                const label = this._decode(labelEncoded);
+                if (isChecked) this.selectedLabels.add(label); else this.selectedLabels.delete(label);
+                this.updateBulkBar();
+            }
+            clearSelection() { this.selectedLabels.clear(); this.updateBulkBar(); this.renderPrompts(); }
+            updateBulkBar() {
+                let bar = document.getElementById('pm_bulk_bar');
+                if (!bar) {
+                    const host = document.querySelector('.manager-actions');
+                    if (host) {
+                        const html = `<div id=\"pm_bulk_bar\" style=\"display:none; gap:8px; align-items:center; padding:8px; border:1px solid var(--border-color); border-radius:8px; background: var(--card-bg);\">
+                            <span id=\"pm_bulk_text\"></span>
+                            <button class=\"btn btn-secondary\" onclick=\"promptManager.batchDeleteSelected()\"><i class=\"fas fa-trash\"></i> 批量删除</button>
+                            <button class=\"btn btn-secondary\" onclick=\"promptManager.batchExportSelected()\"><i class=\"fas fa-file-export\"></i> 批量导出</button>
+                            <button class=\"btn btn-secondary\" onclick=\"promptManager.clearSelection()\">清除选择</button>
+                        </div>`;
+                        host.insertAdjacentHTML('afterend', html);
+                        bar = document.getElementById('pm_bulk_bar');
+                    }
+                }
+                if (!bar) return;
+                const n = this.selectedLabels.size;
+                bar.style.display = n > 0 ? 'flex' : 'none';
+                const txt = document.getElementById('pm_bulk_text');
+                if (txt) txt.textContent = `已选择 ${n} 项`;
+            }
+            batchDeleteSelected() {
+                if (this.selectedLabels.size === 0) return;
+                if (!confirm(`确定删除选中的 ${this.selectedLabels.size} 项？`)) return;
+                const labels = Array.from(this.selectedLabels);
+                labels.forEach(l => this.deleteByLabel(encodeURIComponent(l)));
+                this.clearSelection();
+            }
+            batchExportSelected() {
+                if (this.selectedLabels.size === 0) return;
+                const set = new Set(this.selectedLabels);
+                const data = (this.allPrompts || []).filter(p => set.has(p.label));
+                const items = data.map(p => ({ label: p.label, prompt: p.prompt, negative: p.negative || '', category: p.category || '', badges: p.badges || [] }));
+                this._downloadJson({ schemaVersion: 1, exportedAt: new Date().toISOString(), items }, 'prompt_selected.json');
+            }
+
+            // 还原/撤销
+            restoreDefault(labelEncoded) {
+                const label = this._decode(labelEncoded);
+                const list = this.loadCustomList();
+                const idx = this._findCustomIndexByLabel(label);
+                if (idx >= 0) {
+                    const snapshot = { item: { ...list[idx] }, index: idx };
+                    list.splice(idx, 1);
+                    this.saveCustomList(list);
+                    this.loadAllPrompts();
+                    this.showActionNotification('已还原为系统默认', () => {
+                        const l = this.loadCustomList();
+                        if (snapshot.index <= l.length) l.splice(snapshot.index, 0, snapshot.item); else l.push(snapshot.item);
+                        this.saveCustomList(l);
+                        this.loadAllPrompts();
+                    });
+                }
+            }
+
+            // 分类与徽章管理
+            openManage() {
+                const modal = this.ensureManageModal();
+                const data = this.loadManageData();
+                // 填充分类
+                const catList = modal.querySelector('#pm_m_categories');
+                try {
+                    const defaults = this.computeDefaultMetaOptions();
+                    const cats = (data.categories && data.categories.length) ? data.categories : (defaults.categories || []);
+                    catList.value = (cats || []).join('\n');
+                } catch (_) {
+                    catList.value = (data.categories || []).join('\n');
+                }
+                // 填充徽章
+                const badgeList = modal.querySelector('#pm_m_badges');
+                try {
+                    const defaults = this.computeDefaultMetaOptions();
+                    const bs = (data.badges && data.badges.length) ? data.badges : (defaults.badges || []);
+                    badgeList.value = (bs || []).join('\n');
+                } catch (_) {
+                    badgeList.value = (data.badges || []).join('\n');
+                }
+                // 隐藏项与别名
+                const hc = modal.querySelector('#pm_m_hidden_categories'); if (hc) hc.value = (data.hiddenCategories || []).join('\n');
+                const hb = modal.querySelector('#pm_m_hidden_badges'); if (hb) hb.value = (data.hiddenBadges || []).join('\n');
+                const ca = modal.querySelector('#pm_m_cat_alias'); if (ca) ca.value = this._objToLines(data.categoryAliases || {});
+                const ba = modal.querySelector('#pm_m_badge_alias'); if (ba) ba.value = this._objToLines(data.badgeAliases || {});
+                modal.style.display = 'block';
+            }
+            closeManage() {
+                const modal = document.getElementById('pm_manage_modal');
+                if (modal) modal.style.display = 'none';
+            }
+            saveManage() {
+                const modal = document.getElementById('pm_manage_modal');
+                if (!modal) return;
+                const categories = modal.querySelector('#pm_m_categories').value.split(/\n+/).map(s=>s.trim()).filter(Boolean);
+                const badges = modal.querySelector('#pm_m_badges').value.split(/\n+/).map(s=>s.trim()).filter(Boolean);
+                const hiddenCategories = (modal.querySelector('#pm_m_hidden_categories')?.value || '').split(/\n+/).map(s=>s.trim()).filter(Boolean);
+                const hiddenBadges = (modal.querySelector('#pm_m_hidden_badges')?.value || '').split(/\n+/).map(s=>s.trim()).filter(Boolean);
+                const categoryAliases = this._linesToObj(modal.querySelector('#pm_m_cat_alias')?.value || '');
+                const badgeAliases = this._linesToObj(modal.querySelector('#pm_m_badge_alias')?.value || '');
+                const data = { categories, badges, hiddenCategories, hiddenBadges, categoryAliases, badgeAliases };
+                this.saveManageData(data);
+                try {
+                    if (this.promptSystem && typeof this.promptSystem.saveManageData === 'function') {
+                        this.promptSystem.saveManageData(data);
+                    }
+                } catch(_){}
+                this.closeManage();
+                this.showNotification('分类与徽章已保存');
+            }
+            ensureManageModal() {
+                let modal = document.getElementById('pm_manage_modal');
+                if (modal) return modal;
+                const html = `
+                <div id="pm_manage_modal" class="modal" style="display:none;">
+                  <div class="modal-content" style="max-width:720px;">
+                    <div class="modal-header">
+                      <h3>管理分类与徽章</h3>
+                      <button class="btn btn-sm btn-secondary" onclick="promptManager.closeManage()"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="modal-body" style="display:flex; gap:16px;">
+                      <div class="form-group" style="flex:1;">
+                        <label>分类（每行一条）</label>
+                        <textarea id="pm_m_categories" rows="10" placeholder="摄影类\n艺术创作\n创意场景\n质量优化\n人物角色\n室内场景\n户外场景"></textarea>
+                      </div>
+                      <div class="form-group" style="flex:1;">
+                        <label>徽章（每行一条）</label>
+                        <textarea id="pm_m_badges" rows="10" placeholder="Flux\n传统\ntxt2img\nimg2img\ninpaint\noutpaint\nremove\ncontrolnet\nupscaler\nredux\nkontext"></textarea>
+                      </div>
+                    </div>
+                    <div class="modal-body" style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                      <div class="form-group">
+                        <label>隐藏分类（每行一条）</label>
+                        <textarea id="pm_m_hidden_categories" rows="6" placeholder="例如：测试分类"></textarea>
+                      </div>
+                      <div class="form-group">
+                        <label>隐藏徽章（每行一条）</label>
+                        <textarea id="pm_m_hidden_badges" rows="6" placeholder="例如：旧版"></textarea>
+                      </div>
+                    </div>
+                    <div class="modal-body" style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                      <div class="form-group">
+                        <label>分类别名（每行 旧=>新）</label>
+                        <textarea id="pm_m_cat_alias" rows="6" placeholder="摄影类=>摄影\n艺术创作=>艺术"></textarea>
+                      </div>
+                      <div class="form-group">
+                        <label>徽章别名（每行 旧=>新）</label>
+                        <textarea id="pm_m_badge_alias" rows="6" placeholder="txt2img=>文生图\nimg2img=>图生图"></textarea>
+                      </div>
+                    </div>
+                    <div class="modal-footer" style="display:flex; gap:8px; justify-content:flex-end;">
+                      <button class="btn btn-secondary" onclick="promptManager.closeManage()">取消</button>
+                      <button class="btn btn-primary" onclick="promptManager.saveManage()">保存</button>
+                    </div>
+                  </div>
+                </div>`;
+                document.body.insertAdjacentHTML('beforeend', html);
+                return document.getElementById('pm_manage_modal');
+            }
+            computeDefaultMetaOptions() {
+                const cats = new Set();
+                const badges = new Set();
+                try {
+                    if (this.promptSystem) {
+                        const flux = this.promptSystem.buildPromptShortcutGroups({ isFlux: true, isTxt2Img: true, isImg2Img: false }) || [];
+                        const legacy = this.promptSystem.buildPromptShortcutGroups({ isFlux: false, isTxt2Img: true, isImg2Img: false }) || [];
+                        [flux, legacy].forEach(gs => {
+                            (gs || []).forEach(g => {
+                                if (g && g.title) cats.add(g.title);
+                                (g.badges || []).forEach(b => badges.add(b));
+                                (g.items || []).forEach(it => (it.badges || []).forEach(b => badges.add(b)));
+                            });
+                        });
+                    }
+                    const custom = this.getEffectiveCustomList ? (this.getEffectiveCustomList() || []) : [];
+                    custom.forEach(it => {
+                        if (it.category) cats.add(it.category);
+                        (it.badges || []).forEach(b => badges.add(b));
+                    });
+                } catch (_) {}
+                return { categories: Array.from(cats).sort(), badges: Array.from(badges).sort() };
+            }
+            loadManageData() {
+                try { return JSON.parse(localStorage.getItem('cw_prompt_meta') || '{}'); } catch (_) { return {}; }
+            }
+            saveManageData(data) {
+                try { localStorage.setItem('cw_prompt_meta', JSON.stringify(data || {})); } catch (_) {}
+            }
+            _objToLines(obj) { return Object.entries(obj || {}).map(([k,v]) => `${k}=>${v}`).join('\n'); }
+            _linesToObj(text) {
+                const out = {};
+                String(text||'').split(/\n+/).map(s=>s.trim()).filter(Boolean).forEach(line => {
+                    const idx = line.indexOf('=>');
+                    if (idx>0) { const a=line.slice(0,idx).trim(); const b=line.slice(idx+2).trim(); if(a&&b) out[a]=b; }
+                });
+                return out;
+            }
         }
 
         function switchTab(tabName) {
@@ -534,11 +1300,24 @@
 
             // 更新当前标签
             promptManager.currentTab = tabName;
-            promptManager.renderPrompts();
+            promptManager.filterPrompts();
         }
 
         // 初始化提示词管理器
-        const promptManager = new PromptManager();
+        let promptManager;
+        try {
+            promptManager = new PromptManager();
+            console.log('PromptManager 初始化成功');
+        } catch (error) {
+            console.error('PromptManager 初始化失败:', error);
+            // 显示错误信息给用户
+            document.addEventListener('DOMContentLoaded', () => {
+                const errorDiv = document.createElement('div');
+                errorDiv.style.cssText = 'position:fixed; top:20px; left:20px; right:20px; background:#ff6b6b; color:white; padding:20px; border-radius:8px; z-index:9999;';
+                errorDiv.innerHTML = `<h3>提示词管理器初始化失败</h3><p>错误信息: ${error.message}</p><p>请刷新页面重试或联系管理员。</p>`;
+                document.body.appendChild(errorDiv);
+            });
+        }
 
         // 添加CSS动画
         const style = document.createElement('style');
@@ -549,6 +1328,20 @@
             }
         `;
         document.head.appendChild(style);
+        
+        // 全局错误处理
+        window.addEventListener('error', (event) => {
+            console.error('全局错误:', event.error);
+            if (event.error && event.error.message) {
+                alert(`页面发生错误: ${event.error.message}\n请刷新页面重试。`);
+            }
+        });
+        
+        // 未处理的Promise拒绝
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('未处理的Promise拒绝:', event.reason);
+            alert(`页面发生错误: ${event.reason}\n请刷新页面重试。`);
+        });
     </script>
 </body>
 </html>

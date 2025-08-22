@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前端调试页面</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        #console { background: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; height: 300px; overflow-y: auto; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>前端调试页面</h1>
+    
+    <div id="status"></div>
+    
+    <h3>测试步骤：</h3>
+    <button onclick="testAPIs()">测试API连接</button>
+    <button onclick="testJavaScript()">测试JavaScript加载</button>
+    <button onclick="clearConsole()">清空控制台</button>
+    
+    <h3>控制台输出：</h3>
+    <div id="console"></div>
+    
+    <script>
+        function log(message, type = 'info') {
+            const console = document.getElementById('console');
+            const timestamp = new Date().toLocaleTimeString();
+            console.innerHTML += `[${timestamp}] ${message}\n`;
+            console.scrollTop = console.scrollHeight;
+        }
+        
+        function updateStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+        
+        function clearConsole() {
+            document.getElementById('console').innerHTML = '';
+        }
+        
+        async function testAPIs() {
+            log('开始测试API连接...');
+            
+            try {
+                // 测试工作流API
+                log('测试 /api/workflows...');
+                const workflowResponse = await fetch('/api/workflows');
+                const workflowData = await workflowResponse.json();
+                log(`工作流API响应: ${workflowResponse.status} ${workflowResponse.statusText}`);
+                log(`工作流数量: ${workflowData.workflows?.length || 0}`);
+                
+                // 测试ComfyUI状态API
+                log('测试 /api/comfyui/status...');
+                const statusResponse = await fetch('/api/comfyui/status');
+                const statusData = await statusResponse.json();
+                log(`状态API响应: ${statusResponse.status} ${statusResponse.statusText}`);
+                log(`ComfyUI连接状态: ${statusData.connected}`);
+                
+                updateStatus('API测试完成 - 所有API正常工作', 'success');
+            } catch (error) {
+                log(`API测试失败: ${error.message}`, 'error');
+                updateStatus(`API测试失败: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testJavaScript() {
+            log('开始测试JavaScript加载...');
+            
+            try {
+                // 测试加载app.js
+                log('加载 /static/js/app.js...');
+                const script = document.createElement('script');
+                script.src = '/static/js/app.js';
+                script.onload = () => {
+                    log('app.js 加载成功');
+                    updateStatus('JavaScript加载成功', 'success');
+                };
+                script.onerror = (error) => {
+                    log(`app.js 加载失败: ${error}`, 'error');
+                    updateStatus('JavaScript加载失败', 'error');
+                };
+                document.head.appendChild(script);
+                
+            } catch (error) {
+                log(`JavaScript测试失败: ${error.message}`, 'error');
+                updateStatus(`JavaScript测试失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 页面加载完成后的初始化
+        window.addEventListener('load', () => {
+            log('页面加载完成');
+            updateStatus('页面加载完成，可以开始测试', 'info');
+        });
+        
+        // 捕获全局错误
+        window.addEventListener('error', (event) => {
+            log(`全局错误: ${event.error?.message || event.message}`, 'error');
+        });
+        
+        // 捕获未处理的Promise拒绝
+        window.addEventListener('unhandledrejection', (event) => {
+            log(`未处理的Promise拒绝: ${event.reason}`, 'error');
+        });
+    </script>
+</body>
+</html>
+

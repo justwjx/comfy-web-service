@@ -4,6 +4,9 @@ class PromptShortcutSystem {
         this.lastPresetLabel = '';
         this.shortcutContext = {};
         this.favorites = this.loadFavorites();
+        this.customKey = 'cw_prompt_custom';
+        this.metaKey = 'cw_prompt_meta';
+        this.meta = this.loadManageData();
     }
 
     // 加载收藏的提示词
@@ -20,6 +23,79 @@ class PromptShortcutSystem {
         try {
             localStorage.setItem('cw_prompt_favorites', JSON.stringify(this.favorites));
         } catch (_) {}
+    }
+
+    _emit(name) {
+        try { window.dispatchEvent(new Event(name)); } catch (_) {}
+    }
+
+    // 自定义库
+    loadCustomList() {
+        try { return JSON.parse(localStorage.getItem(this.customKey) || '[]'); } catch (_) { return []; }
+    }
+    getEffectiveCustomList() {
+        const list = this.loadCustomList();
+        return list.filter(x => !x._deleted);
+    }
+    saveCustomList(list) {
+        try { localStorage.setItem(this.customKey, JSON.stringify(list || [])); } catch (_) {}
+    }
+    upsertCustomItem(item) {
+        const list = this.loadCustomList();
+        const idx = list.findIndex(x => x.label === item.label);
+        const payload = {
+            label: item.label || '未命名',
+            prompt: item.prompt || '',
+            negative: item.negative || '',
+            category: item.category || '自定义',
+            badges: item.badges || ['自定义'],
+            _source: item._source || (item.category || '自定义')
+        };
+        if (idx >= 0) list[idx] = payload; else list.unshift(payload);
+        this.saveCustomList(list);
+        this._emit('cw_prompt_custom_updated');
+    }
+
+    // ===== 分类/徽章管理（系统与自定义联动） =====
+    loadManageData() {
+        try { return JSON.parse(localStorage.getItem(this.metaKey) || '{}'); } catch (_) { return {}; }
+    }
+    saveManageData(data) {
+        try { localStorage.setItem(this.metaKey, JSON.stringify(data || {})); } catch (_) {}
+        this.meta = this.loadManageData();
+        this._emit('cw_prompt_meta_updated');
+    }
+    applyMetaToGroups(groups) {
+        const meta = this.meta || {};
+        const hiddenCats = new Set((meta.hiddenCategories || []).filter(Boolean));
+        const hiddenBadges = new Set((meta.hiddenBadges || []).filter(Boolean));
+        const catAliases = meta.categoryAliases || {};
+        const badgeAliases = meta.badgeAliases || {};
+        // 复制并转换
+        const out = [];
+        (groups || []).forEach(g => {
+            let title = g.title || '';
+            if (catAliases[title]) title = catAliases[title];
+            if (hiddenCats.has(title)) return;
+            const newItems = (g.items || []).map(it => {
+                const badges = (it.badges || g.badges || []).map(b => badgeAliases[b] || b).filter(b => !hiddenBadges.has(b));
+                return { ...it, badges };
+            });
+            // 若全部item的徽章都被隐藏，也保留item（不强制过滤），分类过滤以分类为主
+            out.push({ ...g, title, items: newItems });
+        });
+        return out;
+    }
+    extractOptionsFromGroups(groups) {
+        const categories = new Set();
+        const badges = new Set();
+        (groups || []).forEach(g => {
+            if (g && g.title) categories.add(g.title);
+            const bs = g.badges || [];
+            bs.forEach(b => badges.add(b));
+            (g.items || []).forEach(it => (it.badges || []).forEach(b => badges.add(b)));
+        });
+        return { categories: Array.from(categories).sort(), badges: Array.from(badges).sort() };
     }
 
     // 添加收藏
@@ -55,6 +131,18 @@ class PromptShortcutSystem {
                 prompt: f.prompt,
                 negative: f.negative,
                 category: f.category
+            }))
+        }] : [];
+
+        // ============== 自定义提示词 ==============
+        const customList = this.getEffectiveCustomList();
+        const customGroup = customList.length > 0 ? [{
+            title: '🧩 自定义', badges: ['自定义'], items: customList.map(c => ({
+                label: c.label,
+                prompt: c.prompt,
+                negative: c.negative,
+                category: c.category || '自定义',
+                badges: c.badges || ['自定义']
             }))
         }] : [];
 
@@ -287,8 +375,9 @@ class PromptShortcutSystem {
         // ============== 智能路由逻辑 ==============
         let groups = [];
 
-        // 添加收藏组
+        // 添加收藏组与自定义组
         groups.push(...favoritesGroup);
+        groups.push(...customGroup);
 
         if (isFlux) {
             if (isTxt2Img) {
@@ -330,7 +419,8 @@ class PromptShortcutSystem {
             // 传统模型：使用关键词堆叠风格的提示词
             groups = [...groups, ...legacyGroups];
         }
-        
+        // 应用管理元数据（隐藏/别名）
+        try { groups = this.applyMetaToGroups(groups); } catch (_) {}
         return groups;
     }
 
@@ -381,23 +471,11 @@ class PromptShortcutSystem {
         
         if (existing) {
             this.removeFromFavorites(key);
+            this._emit('cw_prompt_favorites_updated');
             return false; // 已移除
         } else {
             this.addToFavorites(item);
-            return true; // 已添加
-        }
-    }
-
-    // 添加收藏功能
-    toggleFavorite(item) {
-        const key = `${item.label}|${(item.prompt || '').slice(0,200)}`;
-        const existing = this.favorites.find(f => f.key === key);
-        
-        if (existing) {
-            this.removeFromFavorites(key);
-            return false; // 已移除
-        } else {
-            this.addToFavorites(item);
+            this._emit('cw_prompt_favorites_updated');
             return true; // 已添加
         }
     }
@@ -506,6 +584,68 @@ class PromptShortcutSystem {
             block.appendChild(btns);
             container.prepend(block);
         } catch (_) {}
+    }
+
+    // 轻量编辑模态（用于首页内联编辑 -> 写入自定义库）
+    openInlineEdit(item) {
+        try {
+            let modal = document.getElementById('ps_inline_edit_modal');
+            if (!modal) {
+                const html = `
+                <div id="ps_inline_edit_modal" class="modal" style="display:none;">
+                  <div class="modal-content" style="max-width:720px;">
+                    <div class="modal-header">
+                      <h3>保存为自定义</h3>
+                      <button class="btn btn-sm btn-secondary" onclick="document.getElementById('ps_inline_edit_modal').style.display='none'"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="modal-body" style="display:flex; flex-direction:column; gap:10px;">
+                      <div class="form-group"><label>名称</label><input id="ps_ie_label" type="text" placeholder="请输入名称"></div>
+                      <div class="form-group"><label>正面提示词</label><textarea id="ps_ie_prompt" rows="4" placeholder="请输入提示词"></textarea></div>
+                      <div class="form-group"><label>负面提示词</label><textarea id="ps_ie_negative" rows="3" placeholder="可选"></textarea></div>
+                    </div>
+                    <div class="modal-footer" style="display:flex; gap:8px; justify-content:flex-end;">
+                      <button class="btn btn-secondary" onclick="document.getElementById('ps_inline_edit_modal').style.display='none'">取消</button>
+                      <button class="btn btn-primary" id="ps_ie_save_btn">保存</button>
+                    </div>
+                  </div>
+                </div>`;
+                document.body.insertAdjacentHTML('beforeend', html);
+                modal = document.getElementById('ps_inline_edit_modal');
+            }
+            const labelEl = modal.querySelector('#ps_ie_label');
+            const promptEl = modal.querySelector('#ps_ie_prompt');
+            const negEl = modal.querySelector('#ps_ie_negative');
+            labelEl.value = item?.label || '';
+            promptEl.value = item?.prompt || '';
+            negEl.value = item?.negative || '';
+            const saveBtn = modal.querySelector('#ps_ie_save_btn');
+            const self = this;
+            saveBtn.onclick = function() {
+                const payload = {
+                    label: labelEl.value.trim() || (promptEl.value || '').slice(0,30) || '未命名',
+                    prompt: promptEl.value.trim(),
+                    negative: negEl.value.trim(),
+                    category: '自定义',
+                    badges: ['自定义'],
+                    _source: '自定义'
+                };
+                if (!payload.prompt) { alert('提示词不能为空'); return; }
+                self.upsertCustomItem(payload);
+                try { modal.style.display = 'none'; } catch(_) {}
+                try { self._showToast('已保存到自定义'); } catch(_) {}
+            };
+            modal.style.display = 'block';
+        } catch (_) {}
+    }
+
+    _showToast(message) {
+        try {
+            const div = document.createElement('div');
+            div.style.cssText = 'position:fixed; right:20px; bottom:20px; background:var(--primary-color); color:#fff; padding:10px 14px; border-radius:8px; z-index:9999;';
+            div.textContent = message;
+            document.body.appendChild(div);
+            setTimeout(()=>{ try{ div.remove(); }catch(_){} }, 2000);
+        } catch(_) {}
     }
 }
 
