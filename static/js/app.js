@@ -21,7 +21,16 @@ class ComfyWebApp {
         
         // 使用新的提示词系统
         this.promptSystem = new PromptShortcutSystem();
-        this.promptTemplates = new PromptTemplates();
+        // 防御性处理：PromptTemplates 可能未定义，避免初始化期报错导致页面卡死
+        try {
+            if (typeof PromptTemplates === 'function') {
+                this.promptTemplates = new PromptTemplates();
+            } else {
+                this.promptTemplates = null;
+            }
+        } catch (_) {
+            this.promptTemplates = null;
+        }
         this.lastPresetLabel = '';
         this.shortcutContext = {};
         this._pendingPositivePrompt = null;
