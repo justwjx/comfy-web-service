@@ -21,16 +21,8 @@ class ComfyWebApp {
         
         // 使用新的提示词系统
         this.promptSystem = new PromptShortcutSystem();
-        // 防御性处理：PromptTemplates 可能未定义，避免初始化期报错导致页面卡死
-        try {
-            if (typeof PromptTemplates === 'function') {
-                this.promptTemplates = new PromptTemplates();
-            } else {
-                this.promptTemplates = null;
-            }
-        } catch (_) {
-            this.promptTemplates = null;
-        }
+        // 可选的模板系统（未引入则为空，相关功能将自动跳过）
+        this.promptTemplates = (typeof PromptTemplates !== 'undefined') ? new PromptTemplates() : null;
         this.lastPresetLabel = '';
         this.shortcutContext = {};
         this._pendingPositivePrompt = null;
@@ -325,7 +317,7 @@ class ComfyWebApp {
                         negativeEl.dispatchEvent(new Event('input', { bubbles: true }));
                         negativeEl.dispatchEvent(new Event('change', { bubbles: true }));
                     }
-                    // 显示“来自提示词库”的提示条，支持撤销回填
+                    // 显示"来自提示词库"的提示条，支持撤销回填
                     try {
                         const parent = document.getElementById('parameterConfigPage');
                         if (parent && !document.getElementById('promptInjectionBanner')) {
@@ -508,7 +500,6 @@ class ComfyWebApp {
         if (filenameLower.includes('upscaler')) return 'upscaler';
         return 'text-to-image';
     }
-    
     startWorkflow() {
         // 若未记录，尝试从下拉菜单读取
         if (!this.selectedWorkflow) {
@@ -602,7 +593,6 @@ class ComfyWebApp {
             alert(`启动生成失败: ${error.message}`);
         }
     }
-    
     collectParameters() {
         // 获取 seed 输入框的值
         let seedInput = document.getElementById('seed');
@@ -1007,7 +997,6 @@ class ComfyWebApp {
         };
         requestAnimationFrame(ensureVisibleAndMeasure);
     }
-
     // 资源监控相关函数
     showResourceMonitor() {
         const rm = document.getElementById('resourceMonitor');
@@ -1186,11 +1175,9 @@ class ComfyWebApp {
         
         try {
             console.log('并行调用API...');
-            // 并行检查服务器状态和加载工作流
-            const [workflowResponse, statusResponse] = await Promise.all([
-                fetch('/api/workflows'),
-                fetch('/api/comfyui/status')
-            ]);
+            // 状态接口后台并行，不阻塞渲染
+            const statusResponsePromise = fetch('/api/comfyui/status').catch(() => null);
+            const workflowResponse = await fetch('/api/workflows');
             
             console.log('API调用完成，检查响应...');
             if (!workflowResponse.ok) throw new Error(`HTTP ${workflowResponse.status}: ${workflowResponse.statusText}`);
@@ -1226,7 +1213,11 @@ class ComfyWebApp {
                 
                 // 更新服务器状态（异步执行，不阻塞页面显示）
                 console.log('更新服务器状态...');
-                this.updateServerStatus(statusResponse).catch(error => {
+                statusResponsePromise.then((res) => {
+                    if (res) this.updateServerStatus(res).catch(error => {
+                        console.error('更新服务器状态失败:', error);
+                    });
+                }).catch(error => {
                     console.error('更新服务器状态失败:', error);
                 });
                 console.log('加载工作流完成');
@@ -1238,7 +1229,6 @@ class ComfyWebApp {
             this.showError(`加载失败: ${error.message}`);
         }
     }
-    
     async updateServerStatus(statusResponse) {
         try {
             const statusData = await statusResponse.json();
@@ -1442,7 +1432,6 @@ class ComfyWebApp {
         
         this.renderWorkflows(filteredWorkflows);
     }
-    
     renderWorkflows(workflows = this.workflows) {
         const container = document.getElementById('workflowCards');
         if (!container) return;
@@ -1851,7 +1840,6 @@ class ComfyWebApp {
         }).filter(Boolean).join('');
         containerAnchor.innerHTML = html;
     }
-
     generateOutpaintParams(outpaintNodes) {
         // 在当前结构中没有 id=advancedParams，改为直接使用锚点或节点参数容器
         const container = document.getElementById('nodeParametersContent');
@@ -1906,7 +1894,6 @@ class ComfyWebApp {
             if (container) container.appendChild(wrap);
         }
     }
-
     generateResizeParams(resizeNodes) {
         // 在当前结构中没有 id=advancedParams，改为直接使用锚点或节点参数容器
         const container = document.getElementById('nodeParametersContent');
@@ -2357,7 +2344,6 @@ class ComfyWebApp {
         this.promptSystem.selectedWorkflow = this.selectedWorkflow;
         return this.promptSystem.buildPromptShortcutGroups({ isFlux, isTxt2Img, isImg2Img });
     }
-
     // 旧的提示词系统函数 - 已被新系统替代
     buildPromptShortcutGroups_OLD({ isFlux, isTxt2Img, isImg2Img }) {
         const filename = (this.selectedWorkflow?.filename || '').toLowerCase();
@@ -2654,531 +2640,7 @@ class ComfyWebApp {
         } catch (_) {}
     }
 
-        // ============== Flux 图生图（Image-to-Image / Kontext） ==============
-        const fluxImgGroups = [
-            {
-                title: '🎯 精确编辑', badges: ['Flux', 'Redux', 'i2i'], items: [
-                    { label: '人物一致性', prompt: 'Keep the person identical with same facial features, expression, and pose. Maintain all physical characteristics and identity.' },
-                    { label: '对象颜色替换', prompt: 'Change only the color of the specified object while preserving its shape, texture, lighting, and all other properties.' },
-                    { label: '背景完全替换', prompt: 'Replace the entire background with a new environment while keeping the main subject completely unchanged in position and appearance.' },
-                    { label: '局部细节修改', prompt: 'Modify only the specified detail while keeping everything else exactly the same. Focus on precise, targeted changes.' },
-                    { label: '材质纹理改变', prompt: 'Change the material or texture of the object while maintaining its shape, color, and lighting conditions.' },
-                    { label: '光照条件调整', prompt: 'Adjust the lighting conditions while keeping all objects and composition exactly the same.' }
-                ]
-            },
-            {
-                title: '🎨 艺术风格迁移', badges: ['Flux', 'style'], items: [
-                    { label: '水彩画风', prompt: 'Transform into a watercolor painting style with soft, flowing edges and translucent washes while keeping the composition intact.' },
-                    { label: '油画质感', prompt: 'Convert to oil painting style with visible brushstrokes, rich impasto texture, and painterly quality while preserving the subject.' },
-                    { label: '铅笔素描', prompt: 'Transform into a detailed pencil sketch with natural graphite shading and fine line work while maintaining composition.' },
-                    { label: '数字艺术', prompt: 'Convert to clean digital art style with smooth rendering, vibrant colors, and modern illustration quality.' },
-                    { label: '动漫风格', prompt: 'Transform into anime or manga art style with clean lineart, cel-shaded coloring, and stylized features.' },
-                    { label: '概念设计', prompt: 'Convert to concept art style with painterly quality, atmospheric effects, and professional illustration appearance.' },
-                    { label: '纸艺剪贴', prompt: 'Convert to paper cut collage with layered colored paper and cast shadows.' },
-                    { label: '折纸', prompt: 'Convert to origami style with folded paper facets and crisp edges.' },
-                    { label: '木刻版画', prompt: 'Convert to woodcut print with bold carved lines and limited palette.' },
-                    { label: '铜版蚀刻', prompt: 'Convert to etching with fine hatch lines and print texture.' },
-                    { label: '点彩', prompt: 'Convert to pointillism with dot-based color mixing and shimmering light.' },
-                    { label: '水墨', prompt: 'Convert to ink wash painting with flowing ink, brush texture and paper bleed.' },
-                    { label: '低多边形', prompt: 'Convert to low poly with faceted geometry and flat shading.' },
-                    { label: '像素风', prompt: 'Convert to pixel art with limited color palette and crisp pixel edges.' },
-                    { label: '赛璐璐', prompt: 'Convert to cel-shaded style with clean outlines and flat color planes.' },
-                    { label: '线稿', prompt: 'Convert to line art with clean ink lines and minimal shading.' },
-                    { label: '等距视角', prompt: 'Convert to isometric illustration with precise geometry and clean shading.' },
-                    { label: '扁平化', prompt: 'Convert to flat design with minimal shading and bold shapes.' },
-                    { label: '3D渲染', prompt: 'Convert to 3D render with realistic materials, reflections and GI lighting.' },
-                    { label: '黏土动画', prompt: 'Convert to claymation with sculpted clay textures and handmade look.' },
-                    { label: '彩绘玻璃', prompt: 'Convert to stained glass with leaded outlines and luminous translucent colors.' },
-                    { label: '马赛克', prompt: 'Convert to mosaic with tessellated tiles and grout lines.' },
-                    { label: '涂鸦', prompt: 'Convert to graffiti street art with bold spray strokes and drips.' },
-                    { label: '波普艺术', prompt: 'Convert to pop art with bold halftones, graphic outlines and vivid colors.' },
-                    { label: '蒸汽波', prompt: 'Apply vaporwave retro neon palette, gradients and nostalgic graphics.' },
-                    { label: '合成波', prompt: 'Apply synthwave neon grids, sun-set gradient and retro futurism.' },
-                    { label: '赛博朋克', prompt: 'Apply cyberpunk neon palette, rain reflections and high contrast; keep composition.' },
-                    { label: '蒸汽朋克', prompt: 'Apply steampunk aesthetics with brass, gears and victorian embellishments.' },
-                    { label: '柴油朋克', prompt: 'Apply dieselpunk industrial grit with heavy machinery aesthetics.' },
-                    { label: '黑色电影', prompt: 'Apply film noir with deep shadows, hard light and dramatic contrast.' },
-                    { label: '复古VHS', prompt: 'Apply retro VHS look with scanlines, noise and chroma bleed.' },
-                    { label: '胶片风', prompt: 'Apply film emulation with soft halation and natural grain; keep color integrity.' },
-                    { label: '富士Velvia', prompt: 'Apply Fuji Velvia color emulation with rich saturation and crisp contrast.' },
-                    { label: '柯达Portra', prompt: 'Apply Kodak Portra film look with gentle skin tones and subtle contrast.' },
-                    { label: '依尔福HP5', prompt: 'Apply Ilford HP5 black-and-white film with fine grain and deep blacks.' },
-                    { label: '巴洛克', prompt: 'Apply baroque painting style with dramatic lighting and ornate detail.' },
-                    { label: '洛可可', prompt: 'Apply rococo with elegant ornament, pastel palette and playful grace.' },
-                    { label: '文艺复兴', prompt: 'Apply renaissance painting with classical proportions and chiaroscuro.' },
-                    { label: '新艺术', prompt: 'Apply art nouveau with flowing lines, floral motifs and decorative borders.' },
-                    { label: '包豪斯', prompt: 'Apply bauhaus minimal geometry, primary colors and functional design.' },
-                    { label: '野兽派', prompt: 'Apply fauvism with bold colors and expressive brushwork.' },
-                    { label: '印象派', prompt: 'Apply impressionism with broken brush strokes and light atmosphere.' },
-                    { label: '立体派', prompt: 'Apply cubism with fragmented geometry and multiple viewpoints.' },
-                    { label: '超现实主义', prompt: 'Apply surrealism with dreamlike scenes and unexpected juxtapositions.' },
-                    { label: '抽象表现', prompt: 'Apply abstract expressionism with gestural strokes and emotive color.' },
-                    { label: '现实主义', prompt: 'Apply realism with accurate representation and natural proportions.' },
-                    { label: '极简主义', prompt: 'Apply minimalism with clean forms, negative space and restrained palette.' },
-                    { label: '故障艺术', prompt: 'Apply glitch aesthetics with databending artifacts and RGB shifts.' },
-                    { label: '霓虹辉光', prompt: 'Apply neon glow effects, emissive edges and high contrast.' },
-                    { label: '移轴小景', prompt: 'Apply tilt-shift miniature effect with shallow plane of focus.' },
-                    { label: '镜头散景', prompt: 'Apply expressive bokeh with bright highlights and depth separation.' }
-                ]
-            },
-            {
-                title: '风格迁移 · 艺术流派', badges: ['style transfer', 'art styles'], items: [
-                    { label: '中式水墨', prompt: 'Convert to Chinese ink wash with rice paper bleed and calligraphic brushwork.' },
-                    { label: '浮世绘', prompt: 'Convert to ukiyo-e woodblock style with flat colors and bold outlines.' },
-                    { label: '国潮新中式', prompt: 'Apply modern Chinese aesthetic with contemporary palettes and motifs.' },
-                    { label: '古典油画', prompt: 'Apply classical oil painting with layered glazing and realistic lighting.' },
-                    { label: '科幻概念', prompt: 'Apply concept art style with cinematic framing and atmospheric depth.' },
-                    { label: '赛博插画', prompt: 'Apply sci-fi illustration with holograms and hard-surface design.' },
-                    { label: '儿童绘本', prompt: 'Apply children storybook style with soft palette and whimsical look.' },
-                    { label: '像素复古游戏', prompt: 'Apply retro game pixel art with 16-color palette and crisp sprites.' },
-                    { label: '低保真Lo-Fi', prompt: 'Apply lo-fi aesthetic with soft noise, warm tones and cozy vibe.' },
-                    { label: '纸面速写', prompt: 'Apply quick paper sketch with pencil construction lines and smudges.' },
-                    { label: '剪影构成', prompt: 'Apply silhouette-driven composition with bold shapes and minimal detail.' },
-                    { label: '马蒂斯拼贴', prompt: 'Apply Matisse-like cutout collage with bold color fields.' },
-                    { label: '蒙德里安格构', prompt: 'Apply De Stijl grid with primary colors and black lines.' }
-                ]
-            },
-            {
-                title: '对象操作', badges: ['object ops'], items: [
-                    { label: '移除物品', prompt: 'Remove the unwanted object and reconstruct the background seamlessly.' },
-                    { label: '替换物品', prompt: 'Replace the target object with the specified item; match lighting and perspective.' },
-                    { label: '添加小物件', prompt: 'Add a small object that blends naturally with the scene; match color and shadows.' }
-                ]
-            },
-            {
-                title: '文本编辑', badges: ['text edit'], items: [
-                    { label: "替换招牌文字", prompt: "Replace 'OPEN' with 'CLOSED' on the sign while matching font style and perspective." },
-                    { label: '修改包装文字', prompt: "Change the label text to 'ORGANIC' while maintaining typography and alignment." }
-                ]
-            },
-            {
-                title: '增强与修复', badges: ['enhance'], items: [
-                    { label: '清晰锐化', prompt: 'Sharpen details and increase micro-contrast while reducing noise; preserve skin texture.' },
-                    { label: '低光提亮', prompt: 'Recover low-light image, boost exposure and balance colors while preventing banding.' },
-                    { label: '去雾与净化', prompt: 'Dehaze the scene and restore natural contrast and true colors.' }
-                ]
-            },
-            {
-                title: '背景与环境', badges: ['background'], items: [
-                    { label: '更换天空', prompt: 'Replace the sky with dramatic clouds while keeping foreground unchanged.' },
-                    { label: '季节转换', prompt: 'Change the season to autumn with golden leaves while preserving composition.' },
-                    { label: '昼夜切换', prompt: 'Change the scene from day to night while maintaining lighting consistency on subjects.' }
-                ]
-            },
-            {
-                title: '人物一致性与美化', badges: ['portrait'], items: [
-                    { label: '保持身份特征', prompt: 'Maintain the same identity, facial features and expression; avoid identity drift.' },
-                    { label: '肤质自然', prompt: 'Subtle skin smoothing while preserving pores and natural texture.' },
-                    { label: '妆容微调', prompt: 'Add subtle makeup enhancements while keeping the original style.' }
-                ]
-            },
-            {
-                title: '修复/外扩（Fill）', badges: ['inpaint', 'outpaint'], items: [
-                    { label: '遮罩区域修复', prompt: 'Inpaint the masked area seamlessly to match surrounding texture and lighting.' },
-                    { label: '画布向外扩展', prompt: 'Outpaint to extend the canvas while keeping style and perspective consistent.' }
-                ]
-            },
-            {
-                title: '放大与细节', badges: ['upscale'], items: [
-                    { label: '2x-4x放大', prompt: 'Upscale 2x to 4x emphasizing detail preservation and artifact reduction.' },
-                    { label: '面部细节增强', prompt: 'Enhance facial details, eyes clarity and hair strands while staying realistic.' }
-                ]
-            },
-            // ====== 扩展：Kontext 分类别编辑快捷 ======
-            {
-                title: '环境/季节替换', badges: ['background', 'season'], items: [
-                    { label: '替换为秋色', prompt: 'Change the scene to autumn with golden leaves while preserving the subject and composition.' },
-                    { label: '冬季雪景', prompt: 'Convert environment to winter snowy landscape; maintain lighting consistency on subject.' },
-                    { label: '晴转夜景', prompt: 'Turn daytime scene into night while keeping subject illumination plausible.' }
-                ]
-            },
-            {
-                title: '风格/艺术迁移', badges: ['style transfer'], items: [
-                    { label: '印象派风', prompt: 'Apply impressionist brushwork and luminous color; preserve structure and silhouettes.' },
-                    { label: '赛博朋克化', prompt: 'Apply cyberpunk neon palette, rain reflections and high contrast; keep composition.' },
-                    { label: '复古胶片感', prompt: 'Apply film emulation with soft halation and natural grain; preserve details.' }
-                ]
-            },
-            {
-                title: '风格迁移 · 动漫/影视/游戏', badges: ['style transfer', 'media'], items: [
-                    { label: '吉卜力', prompt: 'Apply Studio Ghibli-inspired hand-painted style with soft colors, warm lighting and simplified forms; preserve composition.' },
-                    { label: '宫崎骏', prompt: 'Apply Hayao Miyazaki film aesthetic with watercolor-like backgrounds, whimsical mood and clean linework; keep composition.' },
-                    { label: '皮克斯', prompt: 'Apply Pixar CG look with stylized PBR materials, soft global illumination and expressive character lighting; preserve forms.' },
-                    { label: '迪士尼', prompt: 'Apply Disney animation style with clean outlines, saturated colors and classic character proportions; keep composition.' },
-                    { label: '梦工厂', prompt: 'Apply DreamWorks animation style with playful shapes, appealing character design and polished lighting; preserve composition.' },
-                    { label: 'GTA 加载页插画', prompt: 'Apply GTA loading-screen illustration style with bold outlines, cel-shaded blocks and high contrast; preserve shapes.' },
-                    { label: '塞尔达', prompt: 'Apply cel-shaded painterly game style with soft ink-like edges, airy palette and simple shading; keep composition.' },
-                    { label: '原神', prompt: 'Apply anime cel-shaded style with crisp lineart, pastel palette and glossy specular highlights; preserve composition.' },
-                    { label: '最终幻想', prompt: 'Apply Final Fantasy concept-art style with high-fantasy motifs, ornate details and cinematic lighting; keep structure.' },
-                    { label: '巫师', prompt: 'Apply gritty dark-fantasy game grading with muted palette, high micro-contrast and moody atmosphere; preserve forms.' },
-                    { label: '赛博朋克2077', prompt: 'Apply neon-drenched sci-fi game look with chromatic aberration accents and high contrast; keep composition.' },
-                    { label: '我的世界', prompt: 'Convert to voxel/cubic Minecraft-like style with blocky geometry and pixel textures; preserve layout.' },
-                    { label: '守望先锋', prompt: 'Apply stylized hero-shooter look with clean PBR, saturated colors and graphic readability; keep composition.' },
-                    { label: '英雄联盟海报', prompt: 'Apply LoL splash-art style with dynamic posing, dramatic lighting and painterly rendering; preserve subject.' },
-                    { label: '魔兽世界', prompt: 'Apply WoW hand-painted fantasy style with high saturation, chunky forms and stylized outlines; keep structure.' },
-                    { label: '宝可梦', prompt: 'Apply Pokémon style with rounded forms, clean lineart and cheerful palette; preserve composition.' },
-                    { label: '任天堂卡通', prompt: 'Apply Nintendo cartoony look with bright palette, simple shading and bold readability; keep layout.' },
-                    { label: '超级马里奥', prompt: 'Apply Super Mario cheerful style with vivid colors, soft shading and playful shapes; keep composition.' },
-                    { label: '索尼克', prompt: 'Apply Sonic high-energy style with saturated palette and motion-line accents; keep composition.' },
-                    { label: '街头霸王', prompt: 'Apply Street Fighter poster style with dynamic brush strokes, bold highlights and gritty edges; preserve forms.' },
-                    { label: '铁拳', prompt: 'Apply TEKKEN character poster style with high contrast, metallic speculars and dramatic rim light; keep composition.' },
-                    { label: '火影忍者', prompt: 'Apply Naruto anime style with crisp linework, cel shading and dynamic composition; preserve subject.' },
-                    { label: '海贼王', prompt: 'Apply One Piece anime style with bold outlines, saturated colors and exaggerated expressions; keep layout.' },
-                    { label: '龙珠', prompt: 'Apply Dragon Ball anime style with energetic linework, cel shading and power-effect glows; keep structure.' },
-                    { label: 'EVA', prompt: 'Apply Evangelion anime aesthetic with graphic neon accents, bold typography motifs and moody grading; keep composition.' },
-                    { label: 'JOJO', prompt: 'Apply JoJo manga style with dramatic poses, halftone textures and flamboyant color schemes; preserve forms.' },
-                    { label: '进击的巨人', prompt: 'Apply AoT anime style with gritty textures, desaturated palette and epic scale; preserve composition.' },
-                    { label: '鬼灭之刃', prompt: 'Apply Demon Slayer anime style with clean cel shading, ukiyo-e-like patterns and high contrast; keep layout.' },
-                    { label: '咒术回战', prompt: 'Apply Jujutsu Kaisen anime style with crisp linework, modern palettes and dynamic contrasts; preserve composition.' }
-                ]
-            },
-            {
-                title: '人像一致性', badges: ['portrait consistency'], items: [
-                    { label: '身份保持', prompt: 'Maintain the same identity, facial features, hairstyle and expression through edits.' },
-                    { label: '妆容调整', prompt: 'Subtle makeup enhancement while keeping natural skin texture and identity.' },
-                    { label: '服饰替换', prompt: 'Replace outfit with the specified style; maintain pose and cloth physics consistency.' }
-                ]
-            },
-            {
-                title: '情绪/色调', badges: ['mood'], items: [
-                    { label: '明快暖色', prompt: 'Shift to uplifting warm tone while preserving original contrast and materials.' },
-                    { label: '冷峻蓝调', prompt: 'Shift to cool blue tone, cinematic contrast; keep highlights natural.' },
-                    { label: '低饱和电影感', prompt: 'Reduce saturation and apply cinematic grading while preserving skin tones.' }
-                ]
-            },
-            {
-                title: '电商与产品', badges: ['product'], items: [
-                    { label: '纯净背景', prompt: 'Replace background with clean white while keeping natural product shadows.' },
-                    { label: '品牌统一色', prompt: 'Recolor product to brand palette while retaining material properties.' },
-                    { label: '反射控制', prompt: 'Adjust reflections and highlights to look premium without clipping.' }
-                ]
-            }
-        ];
-
-        // ============== 工作流特定提示词库 ==============
-        
-        // Redux专用提示词
-        const reduxSpecificGroups = [
-            {
-                title: '🔧 Redux精准编辑', badges: ['Redux', 'specific'], items: [
-                    { label: '保持身份特征', prompt: 'Maintain the exact same person with identical facial features, bone structure, and expression. No changes to identity.' },
-                    { label: '服装款式替换', prompt: 'Change only the clothing style while keeping the person, pose, and background exactly the same.' },
-                    { label: '发型颜色调整', prompt: 'Modify only the hair color or style while maintaining all other facial features and identity.' },
-                    { label: '物体移除重建', prompt: 'Remove the specified object and reconstruct the background seamlessly with matching textures.' },
-                    { label: '季节环境切换', prompt: 'Change the season or weather while keeping all subjects and main composition unchanged.' },
-                    { label: '照片品质提升', prompt: 'Enhance image quality, sharpness, and details while preserving all original content exactly.' }
-                ]
-            }
-        ];
-
-        // ControlNet专用提示词
-        const controlnetSpecificGroups = [
-            {
-                title: '🎮 ControlNet引导', badges: ['ControlNet', 'specific'], items: [
-                    { label: '姿势控制', prompt: 'Follow the pose reference exactly, detailed human anatomy, natural movement, realistic proportions.' },
-                    { label: '边缘引导', prompt: 'Respect the edge map precisely, maintain structural accuracy, detailed line art interpretation.' },
-                    { label: '深度控制', prompt: 'Follow depth information accurately, realistic spatial relationships, proper foreground and background.' },
-                    { label: '语义分割', prompt: 'Respect the segmentation map, accurate object boundaries, realistic material transitions.' },
-                    { label: '法线贴图', prompt: 'Follow surface normal information, accurate lighting response, realistic material properties.' },
-                    { label: '线稿上色', prompt: 'Color the line art beautifully, respect line boundaries, harmonious color palette, clean coloring.' }
-                ]
-            }
-        ];
-
-        // 外扩专用提示词
-        const outpaintSpecificGroups = [
-            {
-                title: '🖼️ 画布扩展', badges: ['Outpaint', 'specific'], items: [
-                    { label: '左右对称扩展', prompt: 'Extend the canvas symmetrically while maintaining the central composition, consistent style and lighting.' },
-                    { label: '上下自然扩展', prompt: 'Expand vertically with natural continuation of the scene, matching perspective and atmospheric depth.' },
-                    { label: '环境完整补全', prompt: 'Complete the environment logically, add contextual elements that make sense with the existing scene.' },
-                    { label: '风格一致延续', prompt: 'Extend with perfect style consistency, matching colors, textures, and artistic approach throughout.' },
-                    { label: '透视准确延伸', prompt: 'Maintain correct perspective when extending, accurate vanishing points and spatial relationships.' },
-                    { label: '无缝边界融合', prompt: 'Create seamless transitions at the expansion boundaries, no visible seams or inconsistencies.' }
-                ]
-            }
-        ];
-
-        // ========= 根据工作流类型返回对应分组 =========
-        
-        // 根据工作流类型和功能返回相应的分组数据
-        const filename = (this.selectedWorkflow?.filename || '').toLowerCase();
-        let groups = [];
-        
-        if (isFlux && isTxt2Img) {
-            // Flux文生图：使用重构后的现代提示词
-            groups = fluxTxtGroups;
-        } else if (isFlux && isImg2Img) {
-            // Flux图生图：使用简化的风格迁移和编辑提示词
-            groups = fluxImgGroups;
-            
-            // 根据具体工作流类型添加专用提示词
-            if (filename.includes('redux')) {
-                groups = [...reduxSpecificGroups, ...groups];
-            } else if (filename.includes('controlnet')) {
-                groups = [...controlnetSpecificGroups, ...groups];
-            } else if (filename.includes('outpaint') || filename.includes('fill')) {
-                groups = [...outpaintSpecificGroups, ...groups];
-            }
-        } else {
-            // 传统模型：保持现有逻辑
-            groups = isImg2Img ? fluxImgGroups : fluxTxtGroups;
-        }
-        
-        return groups;
-        
-        // ========= 以下为原有的复杂逻辑（暂时保留但不执行）=========
-        const addItems = (arr, title, newItems) => {
-            const g = arr.find(x => x.title === title);
-            if (g) g.items = (g.items || []).concat(newItems);
-        };
-        // Kontext 核心编辑：曝光/重光/取景/透视等
-        addItems(fluxImgGroups, 'Kontext 核心编辑', [
-            { label: '整体提亮', prompt: 'Increase exposure by 0.5~1.0 stops while protecting highlights and skin tones; keep natural contrast.' },
-            { label: '重打光（三点布光）', prompt: 'Relight the subject with three-point lighting (key, fill, rim) while keeping the background consistent.' },
-            { label: '背景虚化', prompt: 'Increase background blur for shallow depth of field while keeping subject sharp; realistic bokeh.' },
-            { label: '透视校正', prompt: 'Correct perspective distortion to vertical alignment while preserving composition and proportions.' },
-            { label: '智能裁切构图', prompt: 'Crop to a stronger composition (rule of thirds) without cutting off important parts; maintain subject breathing room.' },
-            { label: '局部高光压制', prompt: 'Reduce specular highlights on shiny areas while preserving material realism.' }
-        ]);
-        // 对象操作：复制/缩放/材质/阴影反射
-        addItems(fluxImgGroups, '对象操作', [
-            { label: '复制对象', prompt: 'Duplicate the selected object and place it symmetrically; match shadows and reflections.' },
-            { label: '缩放并重排', prompt: 'Resize the target object to 120% and reposition for balanced layout; maintain perspective.' },
-            { label: '材质更换', prompt: 'Change object material to brushed metal while preserving shape and lighting.' },
-            { label: '添加真实阴影', prompt: 'Add realistic contact shadow under the object consistent with the scene light direction.' },
-            { label: '添加反射高光', prompt: 'Add subtle glossy reflection to emphasize material quality without clipping highlights.' },
-            { label: '去除水印/Logo', prompt: 'Remove watermark or logo cleanly and reconstruct underlying texture seamlessly.' }
-        ]);
-        // 文本编辑：新增字体/翻译/透视/描边
-        addItems(fluxImgGroups, '文本编辑', [
-            { label: '新增标题', prompt: 'Add a bold title text centered at the top; clean sans-serif font; match perspective.' },
-            { label: '翻译并替换', prompt: 'Translate existing text to Chinese and replace while keeping font weight and alignment.' },
-            { label: '字体更换', prompt: 'Change the sign text to a serif font with subtle stroke contrast; maintain layout.' },
-            { label: '颜色与描边', prompt: 'Change text color to white with 2px dark outline for readability; preserve kerning.' },
-            { label: '透视重投影', prompt: 'Reproject the text to match wall perspective; keep sharp edges and anti-aliasing.' }
-        ]);
-        // 增强与修复：降噪/白平衡/去伪影等
-        addItems(fluxImgGroups, '增强与修复', [
-            { label: '智能降噪', prompt: 'Denoise while preserving edge detail and skin texture; avoid plastic look.' },
-            { label: '白平衡矫正', prompt: 'Correct white balance to neutral gray; keep ambience; avoid green/magenta cast.' },
-            { label: '颜色均衡', prompt: 'Balance midtones and shadows; subtle S-curve; maintain highlight roll-off.' },
-            { label: '去条带和压缩伪影', prompt: 'Reduce banding and JPEG artifacts in gradients while keeping sharpness.' },
-            { label: '动态模糊还原', prompt: 'Reduce motion blur with deconvolution; improve legibility without halos.' }
-        ]);
-        // 背景与环境：天气/时间/室内外/景深
-        addItems(fluxImgGroups, '背景与环境', [
-            { label: '室内 → 室外', prompt: 'Change the setting from indoor studio to outdoor urban street while keeping subject lighting plausible.' },
-            { label: '大光圈景深', prompt: 'Simulate f/1.8 shallow depth-of-field with smooth bokeh and cat-eye highlights.' },
-            { label: '雨天氛围', prompt: 'Add rainy atmosphere with wet surfaces and subtle droplets; adjust reflections accordingly.' },
-            { label: '雪天氛围', prompt: 'Add light snowfall and cold grading while keeping subject visibility.' },
-            { label: '黄昏色调', prompt: 'Shift to golden hour dusk; warm key light and long soft shadows.' }
-        ]);
-        // 环境/季节替换：更丰富季节与天气
-        addItems(fluxImgGroups, '环境/季节替换', [
-            { label: '春季樱花', prompt: 'Convert environment to spring with sakura blossoms; keep subject lighting consistent.' },
-            { label: '夏日海岸', prompt: 'Convert to summer seaside environment with turquoise water and bright sun.' },
-            { label: '雨夜街景', prompt: 'Turn into rainy night street with neon reflections and wet asphalt.' }
-        ]);
-        // 人像一致性与美化：细项
-        addItems(fluxImgGroups, '人物一致性与美化', [
-            { label: '牙齿美白', prompt: 'Whiten teeth naturally without overexposure; keep enamel texture.' },
-            { label: '眼睛增强', prompt: 'Enhance iris clarity and catchlights while avoiding oversharpening.' },
-            { label: '头发碎发整理', prompt: 'Tame flyaway hairs and smooth edges while keeping natural volume.' },
-            { label: '肤色统一', prompt: 'Unify skin tone across face and neck; maintain realistic texture.' },
-            { label: '身形微调', prompt: 'Subtle body contour refinement while preserving natural proportions.' }
-        ]);
-        // 修复/外扩（Fill）：更多方向与纵横比
-        addItems(fluxImgGroups, '修复/外扩（Fill）', [
-            { label: '去字修复', prompt: 'Remove text from wall and reconstruct underlying brick or plaster texture seamlessly.' },
-            { label: '向左外扩', prompt: 'Outpaint canvas to the left by 20% while keeping style and perspective consistent.' },
-            { label: '向右外扩', prompt: 'Outpaint canvas to the right by 20% while keeping style and perspective consistent.' },
-            { label: '改变纵横比', prompt: 'Extend canvas to 16:9 while maintaining composition balance and background continuity.' }
-        ]);
-        // 放大与细节：档位与专向增强
-        addItems(fluxImgGroups, '放大与细节', [
-            { label: '1.5x放大', prompt: 'Upscale 1.5x with detail preservation and anti-aliasing for thin lines.' },
-            { label: '4x超分', prompt: 'Upscale 4x with texture-enhanced super-resolution; suppress ringing.' },
-            { label: '线稿增强', prompt: 'Enhance line-art clarity and uniform line weight without jaggies.' },
-            { label: '纹理微细化', prompt: 'Boost micro-texture and fabric weave visibility while avoiding noise.' }
-        ]);
-
-        // ============== 标准工作流（非 Flux） ==============
-        const stdTxtGroups = [
-            {
-                title: '写实摄影', badges: ['standard', 'txt2img'], items: [
-                    { label: '自然光写实', prompt: `${baseQuality}, ultra realistic, ${basePhotography}, ${baseSafety}` },
-                    { label: '棚拍硬光', prompt: `${baseQuality}, studio hard light, dramatic shadows, ${basePhotography}` },
-                    { label: '街头纪实', prompt: `${baseQuality}, street photography, candid moment, motion blur` }
-                ]
-            },
-            {
-                title: '插画艺术', badges: ['illustration'], items: [
-                    { label: '厚涂插画', prompt: `${baseQuality}, painterly style, textured brushwork, color harmony` },
-                    { label: '赛博插画', prompt: `${baseQuality}, sci-fi illustration, holograms, hard-surface design` },
-                    { label: '儿童绘本', prompt: `${baseQuality}, children storybook, soft palette, whimsical` }
-                ]
-            }
-        ];
-        // 标准文生图：补充主题
-        addItems(stdTxtGroups, '写实摄影', [
-            { label: '自然风光', prompt: `${baseQuality}, landscape photography, golden hour, wide dynamic range` },
-            { label: '美食特写', prompt: `${baseQuality}, food photography, soft diffused light, appetizing steam` },
-            { label: '建筑室内', prompt: `${baseQuality}, interior photography, natural window light, clean lines` }
-        ]);
-        addItems(stdTxtGroups, '插画艺术', [
-            { label: '像素风插画', prompt: `${baseQuality}, pixel art, crisp pixel edges, limited palette` },
-            { label: '低多边形', prompt: `${baseQuality}, low poly illustration, faceted geometry, flat shading` }
-        ]);
-
-        const stdImgGroups = [
-            {
-                title: '修图增强', badges: ['retouch'], items: [
-                    { label: '人像修饰', prompt: 'Subtle skin smoothing, blemish removal, keep natural texture.' },
-                    { label: '景色优化', prompt: 'Increase clarity, color grading teal & orange, preserve natural look.' }
-                ]
-            },
-            {
-                title: '风格化', badges: ['stylize'], items: [
-                    { label: '胶片复古', prompt: 'Film emulation with natural grain and soft halation.' },
-                    { label: '赛博朋克', prompt: 'Neon teal/purple palette, high contrast, rainy reflections.' }
-                ]
-            }
-        ];
-        // 标准图生图：增强更多细分能力
-        addItems(stdImgGroups, '修图增强', [
-            { label: '白平衡', prompt: 'Correct white balance to neutral; preserve ambiance.' },
-            { label: '降噪保细节', prompt: 'Denoise while keeping hair and fabric details.' },
-            { label: '锐化微对比', prompt: 'Micro-contrast sharpening for a natural crisp look.' }
-        ]);
-        addItems(stdImgGroups, '风格化', [
-            { label: '黑白高反差', prompt: 'High-contrast black and white conversion, strong tonal separation.' },
-            { label: 'HDR冷暖', prompt: 'Balanced HDR with cool shadows and warm highlights.' }
-        ]);
-
-        // ===== 将同类子分组整合为"总分组 + 子分组"结构 =====
-        const findByTitle = (arr, title) => arr.find(g => g.title === title);
-
-        if (isFlux && isTxt2Img) {
-            // 基础构图与摄影（文生图）
-            const baseGroup = {
-                title: '基础构图与摄影（文生图）',
-                badges: ['Flux', 'txt2img'],
-                subgroups: [
-                    '构图与风格', '人像与姿态', '风景与自然', '建筑与室内', '产品与电商', '光照与镜头', '图形设计与Logo'
-                ].map(t => {
-                    const g = findByTitle(fluxTxtGroups, t);
-                    return g ? { title: g.title, items: g.items } : null;
-                }).filter(Boolean)
-            };
-
-            // 艺术与风格（文生图）
-            const styleGroup = {
-                title: '艺术与风格（文生图）',
-                badges: ['Flux', 'txt2img'],
-                subgroups: [
-                    '艺术插画', '幻想与科幻', '艺术风格 Art Styles'
-                ].map(t => {
-                    const g = findByTitle(fluxTxtGroups, t);
-                    return g ? { title: g.title, items: g.items } : null;
-                }).filter(Boolean)
-            };
-
-            // 主题与题材（文生图）
-            const topicTitles = [
-                '自然 Nature','城市 Cities','人物 People','动物 Animals','历史 Historical','科技 Technology','神话 Mythology','太空 Space','载具 Vehicles','文化 Cultural','事件 Events','情绪 Emotions','美食 Food','四季 Seasons','爱好 Hobbies','时尚 Fashion','流行文化 Pop Culture','生活方式 Lifestyle','健康 Health'
-            ];
-            const topicGroup = {
-                title: '主题与题材（文生图）',
-                badges: ['Flux', 'txt2img'],
-                subgroups: topicTitles.map(t => {
-                    const g = findByTitle(fluxTxtGroups, t);
-                    return g ? { title: g.title, items: g.items } : null;
-                }).filter(Boolean)
-            };
-
-            return [baseGroup, styleGroup, topicGroup];
-        }
-
-        if (isFlux && isImg2Img) {
-            // 合并风格迁移相关子分组
-            const stCommon = findByTitle(fluxImgGroups, '风格迁移 · 通用');
-            const stArt = findByTitle(fluxImgGroups, '风格迁移 · 艺术流派');
-            const stMedia = findByTitle(fluxImgGroups, '风格迁移 · 动漫/影视/游戏');
-            const stExtra = findByTitle(fluxImgGroups, '风格/艺术迁移');
-            const mergedCommon = {
-                title: '风格迁移 · 通用',
-                items: [
-                    ...(stCommon?.items || []),
-                    ...(stExtra?.items || [])
-                ]
-            };
-
-            // 明确顺序：Kontext核心编辑 → 所有风格迁移 → 其它编辑类
-            const core = findByTitle(fluxImgGroups, 'Kontext 核心编辑');
-            const othersOrder = [
-                '对象操作','文本编辑','增强与修复','背景与环境','环境/季节替换','人像一致性与美化','修复/外扩（Fill）','放大与细节'
-            ];
-            const others = othersOrder.map(t => {
-                const g = findByTitle(fluxImgGroups, t);
-                return g ? { title: g.title, items: g.items } : null;
-            }).filter(Boolean);
-
-            const ordered = [];
-            if (core) ordered.push({ title: core.title, items: core.items });
-            if (mergedCommon.items.length > 0) ordered.push(mergedCommon);
-            if (stArt) ordered.push({ title: stArt.title, items: stArt.items });
-            if (stMedia) ordered.push({ title: stMedia.title, items: stMedia.items });
-            ordered.push(...others);
-
-            return [{
-                title: 'Kontext 图生图（编辑）',
-                badges: ['Flux', 'img2img'],
-                subgroups: ordered
-            }];
-        }
-
-        if (!isFlux && isTxt2Img) {
-            const gPhoto = findByTitle(stdTxtGroups, '写实摄影');
-            const gIllus = findByTitle(stdTxtGroups, '插画艺术');
-            const baseGroup = gPhoto ? { title: '基础构图与摄影（文生图）', badges: ['标准','txt2img'], subgroups: [{ title: gPhoto.title, items: gPhoto.items }] } : null;
-            const styleGroup = gIllus ? { title: '艺术与风格（文生图）', badges: ['标准','txt2img'], subgroups: [{ title: gIllus.title, items: gIllus.items }] } : null;
-            return [baseGroup, styleGroup].filter(Boolean);
-        }
-
-        if (!isFlux && isImg2Img) {
-            const gRetouch = findByTitle(stdImgGroups, '修图增强');
-            const gStylize = findByTitle(stdImgGroups, '风格化');
-            const subs = [];
-            if (gRetouch) subs.push({ title: gRetouch.title, items: gRetouch.items });
-            if (gStylize) subs.push({ title: gStylize.title, items: gStylize.items });
-            return [{ title: '图生图（编辑）', badges: ['标准','img2img'], subgroups: subs }];
-        }
-
-        return [];
-    }
-    recordShortcutUsage(item) {
-        const key = `${item.label}|${(item.prompt || '').slice(0,200)}`;
-        const store = this.getShortcutUsageStore();
-        if (!store[key]) {
-            store[key] = { label: item.label, prompt: item.prompt || '', count: 0, lastTs: 0 };
-        }
-        // 标注当前使用的工作流类型键，供"最近/最常用"筛选
-        const ctx = this.shortcutContext || {};
-        const typeKey = `${ctx.isFlux ? 'flux' : 'std'}:${ctx.isTxt2Img ? 'txt2img' : (ctx.isImg2Img ? 'img2img' : 'other')}`;
-        store[key].typeKey = typeKey;
-        store[key].count += 1;
-        store[key].lastTs = Date.now();
-        // 限制存储大小
-        const entries = Object.entries(store);
-        if (entries.length > 200) {
-            // 删除最旧的多余项
-            entries.sort((a,b)=>a[1].lastTs - b[1].lastTs);
-            const toDelete = entries.slice(0, entries.length - 200);
-            toDelete.forEach(([k])=>delete store[k]);
-        }
-        this.saveShortcutUsageStore(store);
-    }
+    // 旧版内联提示词分组已移除（统一由 PromptShortcutSystem 提供）
     getRecentShortcutGroup(max = 8, context) {
         const store = this.getShortcutUsageStore();
         const ctx = context || this.shortcutContext || {};
@@ -3213,7 +2675,6 @@ class ComfyWebApp {
                 section.style.display = 'block';
             }
         });
-
         // 强制隐藏底部的图像输入设置区（顶部已有紧凑输入）
         const imgSection = document.getElementById('imageInputSection');
         if (imgSection) imgSection.style.display = 'none';
@@ -3233,7 +2694,6 @@ class ComfyWebApp {
             positivePrompt: document.getElementById('positivePrompt'),
             negativePrompt: document.getElementById('negativePrompt')
         };
-        
         const defaultElements = {
             width: document.getElementById('defaultWidth'),
             height: document.getElementById('defaultHeight'),
@@ -3242,7 +2702,6 @@ class ComfyWebApp {
             seed: document.getElementById('defaultSeed'),
             sampler: document.getElementById('defaultSampler')
         };
-        
         Object.keys(elements).forEach(key => {
             const element = elements[key];
             const defaultElement = defaultElements[key];
@@ -3264,18 +2723,17 @@ class ComfyWebApp {
             }
             if (defaultElement) defaultElement.textContent = defaultValue;
         });
-        
         console.log('设置默认值:', defaults);
     }
     
     getDefaultValue(key) {
         const defaults = {
-            width: 1024,  // 默认值，会被JSON文件中的实际值覆盖
-            height: 1024,  // 默认值，会被JSON文件中的实际值覆盖
-            steps: 20,     // 默认值，会被JSON文件中的实际值覆盖
-            cfg: 1.0,      // 默认值，会被JSON文件中的实际值覆盖
-            seed: -1,      // 默认值，会被JSON文件中的实际值覆盖
-            sampler: 'euler', // 默认值，会被JSON文件中的实际值覆盖
+            width: 1024,
+            height: 1024,
+            steps: 20,
+            cfg: 1.0,
+            seed: -1,
+            sampler: 'euler',
             scheduler: 'normal',
             denoise: 1.0,
             guidance: 7.0
@@ -3288,7 +2746,6 @@ class ComfyWebApp {
         const compactWrap = document.getElementById('imageInputsCompact');
         const compactSection = document.getElementById('imageInputsCompactSection');
         if (!container && !compactWrap) return;
-        
         if (!imageInputs || imageInputs.length === 0) {
             if (container) {
                 container.innerHTML = `
@@ -3301,35 +2758,23 @@ class ComfyWebApp {
             if (compactSection) compactSection.style.display = 'none';
             return;
         }
-        
-        // 对于 fill/outpaint 类型，限制只显示一个主图像输入
         let inputs = imageInputs.slice();
         try {
             const t = (this.selectedWorkflow && this.selectedWorkflow.filename || '').toLowerCase();
             if (t.includes('fill') || t.includes('outpaint')) {
-                // 仅保留第一个必需或第一个输入
                 const firstRequired = inputs.find(i => i.required) || inputs[0];
                 inputs = firstRequired ? [firstRequired] : [];
             }
         } catch(_) {}
-
-        // 按必选/可选排序：必选在前，可选在后
         const sortedInputs = inputs.sort((a, b) => {
             if (a.required && !b.required) return -1;
             if (!a.required && b.required) return 1;
             return 0;
         });
-        
-        // 检查是否有多个图像输入节点
         const showNodeIds = sortedInputs.length > 1;
-        
-        // 分组显示必选和可选
         const requiredInputs = sortedInputs.filter(input => input.required);
         const optionalInputs = sortedInputs.filter(input => !input.required);
-        
         let html = '';
-        
-        // 生成必选图片输入
         if (requiredInputs.length > 0) {
             html += `
                 <div class="image-input-section">
@@ -3338,8 +2783,6 @@ class ComfyWebApp {
                 </div>
             `;
         }
-        
-        // 生成可选图片输入
         if (optionalInputs.length > 0) {
             html += `
                 <div class="image-input-section">
@@ -3348,10 +2791,7 @@ class ComfyWebApp {
                 </div>
             `;
         }
-        
         if (container) container.innerHTML = html;
-
-        // 渲染紧凑版（提示词上方）：两个以内并排，更多则自动换行
         if (compactWrap && compactSection) {
             compactSection.style.display = 'block';
             const compactItems = sortedInputs.map(input => this.generateCompactImageInputHTML(input)).join('');
@@ -3384,7 +2824,7 @@ class ComfyWebApp {
             </div>
         `;
     }
-
+    
     generateCompactImageInputHTML(input) {
         return `
             <div class="ci-item" title="${input.description}">
@@ -3409,15 +2849,12 @@ class ComfyWebApp {
     showImageSelectModal(nodeId, imageType) {
         this.currentImageNodeId = nodeId;
         this.currentImageType = imageType;
-        
         const modal = document.getElementById('imageSelectModal');
         if (modal) {
             modal.style.display = 'flex';
-            // 每次打开模态框时都重新加载图片列表
-            this.loadImages(true); // 传递 true 强制刷新
+            // 每次打开都刷新一次
+            this.loadImages(true);
             this.setupImageModalEvents();
-            
-            // 启动定期刷新
             this.startImageListAutoRefresh();
         }
     }
@@ -3426,30 +2863,22 @@ class ComfyWebApp {
         const modal = document.getElementById('imageSelectModal');
         if (modal) {
             modal.style.display = 'none';
-            // 停止定期刷新
             this.stopImageListAutoRefresh();
         }
     }
 
-    // 启动图片列表自动刷新
     startImageListAutoRefresh() {
-        // 清除之前的定时器
         this.stopImageListAutoRefresh();
-        
-        // 每30秒自动刷新一次图片列表
         this.imageListRefreshTimer = setInterval(() => {
             const modal = document.getElementById('imageSelectModal');
             if (modal && modal.style.display === 'flex') {
-                console.log('自动刷新图片列表');
                 this.loadImages(true);
             } else {
-                // 如果模态框已关闭，停止刷新
                 this.stopImageListAutoRefresh();
             }
-        }, 30000); // 30秒
+        }, 30000);
     }
 
-    // 停止图片列表自动刷新
     stopImageListAutoRefresh() {
         if (this.imageListRefreshTimer) {
             clearInterval(this.imageListRefreshTimer);
@@ -3457,16 +2886,13 @@ class ComfyWebApp {
         }
     }
 
+    // 加载图片数据并渲染到模态框
     async loadImages(forceRefresh = false) {
         try {
-            // 显示加载状态
             this.showImageLoadingState(true);
-            
-            // 添加时间戳参数防止缓存
             const url = forceRefresh ? `/api/images?t=${Date.now()}` : '/api/images';
             const response = await fetch(url);
             const data = await response.json();
-            
             if (data.success) {
                 this.renderImageTabs(data.images);
             } else {
@@ -3485,7 +2911,6 @@ class ComfyWebApp {
     showImageLoadingState(loading) {
         const uploadedContainer = document.getElementById('uploadedImages');
         const generatedContainer = document.getElementById('generatedImages');
-        
         if (loading) {
             const loadingHtml = `
                 <div class="images-loading">
@@ -3502,7 +2927,6 @@ class ComfyWebApp {
     showImageLoadingError(errorMessage) {
         const uploadedContainer = document.getElementById('uploadedImages');
         const generatedContainer = document.getElementById('generatedImages');
-        
         const errorHtml = `
             <div class="images-error">
                 <i class="fas fa-exclamation-triangle"></i>
@@ -3513,16 +2937,13 @@ class ComfyWebApp {
                 </button>
             </div>
         `;
-        
         if (uploadedContainer) uploadedContainer.innerHTML = errorHtml;
         if (generatedContainer) generatedContainer.innerHTML = errorHtml;
     }
 
+    // 根据接口返回渲染两个标签页
     renderImageTabs(images) {
-        // 存储图像数据供搜索使用
         this.allImages = images;
-        
-        // 渲染已上传的图像
         const uploadedContainer = document.getElementById('uploadedImages');
         if (uploadedContainer) {
             if (images.uploaded && images.uploaded.length > 0) {
@@ -3537,8 +2958,6 @@ class ComfyWebApp {
                 `;
             }
         }
-
-        // 渲染已生成的图像
         const generatedContainer = document.getElementById('generatedImages');
         if (generatedContainer) {
             if (images.generated && images.generated.length > 0) {
@@ -3554,83 +2973,6 @@ class ComfyWebApp {
             }
         }
     }
-
-    renderImageGrid(imageList, source) {
-        
-        return imageList.map(img => `
-            <div class="image-item" onclick="app.selectImage('${img.path}', '${img.name}', '${source}')" 
-                 data-name="${img.name.toLowerCase()}" data-size="${img.size}">
-                <div class="image-preview">
-                    <img src="/outputs/${img.path}" alt="${img.name}" loading="lazy" 
-                         onerror="console.error('图片加载失败:', '/outputs/${img.path}')">
-                    <div class="image-overlay">
-                        <button class="preview-btn" onclick="event.stopPropagation(); app.previewImage('/outputs/${img.path}', '${img.name}')">
-                            <i class="fas fa-search-plus"></i>
-                        </button>
-                        ${(() => {
-                            try {
-                                const t = (this.selectedWorkflow && this.selectedWorkflow.filename || '').toLowerCase();
-                                if (t.includes('fill')) {
-                                    return `<button class=\"preview-btn\" onclick=\"event.stopPropagation(); app.openMaskEditor('/outputs/${img.path}', '${img.name}', '${img.path}', '${source}')\"><i class=\"fas fa-pen\"></i></button>`;
-                                }
-                            } catch(_) {}
-                            return '';
-                        })()}
-                        <button class="select-btn" onclick="event.stopPropagation(); app.selectImage('${img.path}', '${img.name}', '${source}')">
-                            <i class="fas fa-check"></i>
-                            选择
-                        </button>
-                        <button class="delete-btn" onclick="event.stopPropagation(); app.deleteImage('${img.name}', '${source}')">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="image-info">
-                    <span class="image-name" title="${img.name}">${this.truncateFileName(img.name)}</span>
-                    <span class="image-size">${this.formatFileSize(img.size)}</span>
-                </div>
-            </div>
-        `).join('');
-    }
-
-    // 画廊参数按钮：容错拉取元数据（新旧命名均支持），失败则提示
-    async viewMetadataFallback(filename, imageUrl) {
-        try {
-            // 直接请求后端统一接口（已支持新旧命名）
-            const resp = await fetch(`/api/image-metadata/${filename}`);
-            const data = await resp.json();
-            if (data.success) {
-                // 复用 gallery.html 的展示逻辑：简单弹窗渲染
-                const meta = data.metadata || {};
-                const pretty = document.createElement('pre');
-                pretty.style.maxHeight = '70vh';
-                pretty.style.overflow = 'auto';
-                pretty.style.whiteSpace = 'pre-wrap';
-                pretty.textContent = JSON.stringify(meta, null, 2);
-                const wrap = document.createElement('div');
-                wrap.className = 'image-preview-modal';
-                wrap.innerHTML = `
-                    <div class="preview-content" style="max-width: 800px;">
-                        <div class="preview-header">
-                            <h3>生成参数</h3>
-                            <button class="close-preview" onclick="this.closest('.image-preview-modal').remove()">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </div>
-                        <div class="preview-body" style="padding: 12px;">
-                            ${imageUrl ? `<img src="${imageUrl}" alt="preview" style="max-width:100%; border-radius:8px; margin-bottom:12px;"/>` : ''}
-                        </div>
-                    </div>`;
-                wrap.querySelector('.preview-body').appendChild(pretty);
-                document.body.appendChild(wrap);
-            } else {
-                alert('获取元数据失败: ' + (data.error || '未知错误'));
-            }
-        } catch (e) {
-            alert('获取元数据失败: ' + e.message);
-        }
-    }
-
     // ===== 遮罩编辑器（Fill 工作流） =====
     openMaskEditor(imageUrl, name, path, source='uploaded') {
         try {
@@ -3777,7 +3119,6 @@ class ComfyWebApp {
         const name = fileName.substring(0, fileName.lastIndexOf('.'));
         return name.substring(0, 15) + '...' + ext;
     }
-
     // 图片预览功能
     previewImage(imageSrc, imageName) {
         // 创建预览模态框
@@ -4172,6 +3513,44 @@ class ComfyWebApp {
         }, 3000);
     }
 
+    // 渲染图片网格（用于画廊与选择器）
+    renderImageGrid(imageList, source) {
+        return imageList.map(img => `
+            <div class="image-item" onclick="app.selectImage('${img.path}', '${img.name}', '${source}')" 
+                 data-name="${img.name.toLowerCase()}" data-size="${img.size}">
+                <div class="image-preview">
+                    <img src="/outputs/${img.path}" alt="${img.name}" loading="lazy" 
+                         onerror="console.error('图片加载失败:', '/outputs/${img.path}')">
+                    <div class="image-overlay">
+                        <button class="preview-btn" onclick="event.stopPropagation(); app.previewImage('/outputs/${img.path}', '${img.name}')">
+                            <i class="fas fa-search-plus"></i>
+                        </button>
+                        ${(() => {
+                            try {
+                                const t = (this.selectedWorkflow && this.selectedWorkflow.filename || '').toLowerCase();
+                                if (t.includes('fill')) {
+                                    return `<button class=\"preview-btn\" onclick=\"event.stopPropagation(); app.openMaskEditor('/outputs/${img.path}', '${img.name}', '${img.path}', '${source}')\"><i class=\"fas fa-pen\"></i></button>`;
+                                }
+                            } catch(_) {}
+                            return '';
+                        })()}
+                        <button class="select-btn" onclick="event.stopPropagation(); app.selectImage('${img.path}', '${img.name}', '${source}')">
+                            <i class="fas fa-check"></i>
+                            选择
+                        </button>
+                        <button class="delete-btn" onclick="event.stopPropagation(); app.deleteImage('${img.name}', '${source}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="image-info">
+                    <span class="image-name" title="${img.name}">${this.truncateFileName(img.name)}</span>
+                    <span class="image-size">${this.formatFileSize(img.size)}</span>
+                </div>
+            </div>
+        `).join('');
+    }
+
     toggleNegativePrompt(hasNegativePrompt) {
         const negativePromptGroup = document.getElementById('negativePromptGroup');
         if (negativePromptGroup) {
@@ -4262,7 +3641,6 @@ class ComfyWebApp {
             `;
         }).join('');
     }
-
     generateModelLoaders(modelLoaders) {
         const container = document.getElementById('modelLoaders');
         if (!container) return;
@@ -4754,7 +4132,6 @@ class ComfyWebApp {
         
         return date.toLocaleDateString();
     }
-    
     applyPromptFromManager(label, prompt) {
         const positiveEl = document.getElementById('positivePrompt');
         if (positiveEl) {
@@ -4894,7 +4271,6 @@ class ComfyWebApp {
             </div>
         `).join('');
     }
-    
     searchPrompts(query) {
         if (!query.trim()) {
             document.getElementById('searchResults').innerHTML = `

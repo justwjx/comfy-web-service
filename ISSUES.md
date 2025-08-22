@@ -129,3 +129,39 @@ rg "class\s+PromptTemplates|PromptTemplates\W" static/js
 ```
 
 
+
+## 2025-08-22 工作流页面卡死/图片选择不可用 - 诊断与修复
+
+- 症状：
+  - 首页“正在加载工作流...”转圈；
+  - 进入工作流时报 `PromptTemplates is not defined`；
+  - 进一步修复后，进入详情时报 `setDefaultValues is not a function`、`generateImageInputs is not a function`；
+  - 弹出图片选择弹窗后，无图片且报 `this.loadImages is not a function`。
+
+- 根因：
+  - `static/js/app.js` 中存在一大段旧版内联提示词分组被误保留在类体外（早前），后续清理时又误删了多处必需方法；
+  - 新增了对 `PromptTemplates` 的直接实例化，但仓库并未提供该类，导致初始化 ReferenceError；
+  - 与图片选择相关的一系列方法缺失，导致弹窗功能不完整。
+
+- 修复：
+  1) 删除旧版内联分组，补齐“最近/最常用”方法：`getRecentShortcutGroup`、`getFrequentShortcutGroup`。
+  2) 将 `PromptTemplates` 改为可选依赖：`this.promptTemplates = typeof PromptTemplates!=="undefined" ? new PromptTemplates() : null`，并保证调用前判空。
+  3) 恢复与参数区相关的方法：`setDefaultValues`、`getDefaultValue`、`showAllConfigSections`。
+  4) 恢复图片选择相关完整实现：
+     - `generateImageInputs`、`generateImageInputHTML`、`generateCompactImageInputHTML`
+     - `showImageSelectModal`、`hideImageSelectModal`、`startImageListAutoRefresh`、`stopImageListAutoRefresh`
+     - `loadImages`、`showImageLoadingState`、`showImageLoadingError`、`renderImageTabs`、`renderImageGrid`
+  5) 事件监听与UI：确保按钮点击与模态框交互均生效。
+
+- 预防：
+  - 大文件编辑前后务必运行 ESLint/基本功能自测；
+  - 对可选模块使用前判空；
+  - 移除大段旧代码时，检查是否连带删掉被调用的方法；
+  - 为关键JS建立最小冒烟测试清单（首页加载、进入工作流、打开图片选择、应用快捷提示）。
+
+- 备份：
+  - 已创建备份目录 `backups/20250822_223355/`，包含：
+    - `static/js/app.js`
+    - `static/js/prompt-shortcuts.js`
+    - `templates/prompt-manager.html`
+
